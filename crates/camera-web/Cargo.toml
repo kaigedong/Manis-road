@@ -1,0 +1,14 @@
+[package]
+name = "camera-web"
+version = "0.1.0"
+edition = "2024"
+description = "上海交通监控资料的 WASM 审核预览页"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+manis-camera-catalog = { path = "../camera-catalog" }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"

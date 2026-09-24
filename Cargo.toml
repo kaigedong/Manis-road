@@ -1,0 +1,4 @@
+[workspace]
+members = ["crates/camera-catalog", "crates/camera-web"]
+default-members = ["crates/camera-catalog"]
+resolver = "3"

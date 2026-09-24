@@ -1,0 +1,18 @@
+* { box-sizing: border-box; }
+:root { font: 16px/1.6 system-ui, -apple-system, "PingFang SC", sans-serif; color: #122539; background: #f4f7f8; }
+body { margin: 0; }
+header { padding: 3rem max(1.5rem, calc((100vw - 960px) / 2)); background: #103a4b; color: #f8fcfb; }
+header h1 { margin: .3rem 0; font-size: clamp(2rem, 5vw, 3.2rem); }
+.eyebrow { letter-spacing: .14em; font-size: .7rem; opacity: .7; }
+main { max-width: 960px; margin: auto; padding: 1rem 1.5rem 4rem; }
+section { margin-top: 1.5rem; padding: 1.5rem; border-radius: 1rem; background: white; box-shadow: 0 3px 18px #21445812; }
+h2 { margin: 0 0 1rem; font-size: 1.25rem; }
+h3 { margin: 0 0 .5rem; font-size: 1.05rem; }
+p { margin: .4rem 0; }
+.notice { padding: .8rem 1rem; border-left: 4px solid #bd8038; background: #fff8ea; }
+ul { padding-left: 1.5rem; }
+.records { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 1rem; }
+.records li { padding: 1rem; border: 1px solid #dce8e8; border-radius: .75rem; overflow-wrap: anywhere; }
+a { color: #116478; }
+a:focus-visible { outline: 3px solid #c68d33; }
+footer { max-width: 960px; margin: auto; padding: 0 1.5rem 2rem; color: #5e6d76; font-size: .85rem; }

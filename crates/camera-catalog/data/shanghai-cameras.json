@@ -1,0 +1,56 @@
+{
+  "sources": [
+    {
+      "id": "xuhui-20250828",
+      "title": "徐汇新增“电子警察”6套，有非机动车测速",
+      "url": "https://www.shanghai.gov.cn/nw17239/20250828/094eed2f24c54f1b8184b81031f80d15.html",
+      "published_on": "2025-08-28",
+      "review_note": "政府公开公告。当前环境无法直接核对页面附图；从检索摘录提取的候选点位均待人工核验。公告为固定式设备，不等同于针对摩托车执法。"
+    },
+    {
+      "id": "baoshan-20260107",
+      "title": "宝山新增固定式交通技术监控设备94套（含非机动车测速），具体点位在内",
+      "url": "https://www.shanghai.gov.cn/nw17239/20260107/e808dce2edfb485f8e6ba4f0ede18fef.html",
+      "published_on": "2026-01-07",
+      "review_note": "待人工阅读公告的图片点位表，尚未逐点提取；94 是公告设备数，不是本目录已收录数。"
+    }
+  ],
+  "records": [
+    {
+      "id": "xuhui-20250828-01",
+      "source_id": "xuhui-20250828",
+      "location_text": "罗秀路出龙州路东约160米",
+      "equipment": "固定式交通技术监控设备（具体抓拍类型待核验）",
+      "applies_to_motorcycle": null,
+      "coordinate": null,
+      "photo_url": null,
+      "photo_taken_on": null,
+      "evidence_level": "candidate",
+      "review_note": "来自对政府公告的检索摘录；待人工对照原公告图表核对名称、距离、方向和设备类别。"
+    },
+    {
+      "id": "xuhui-20250828-02",
+      "source_id": "xuhui-20250828",
+      "location_text": "龙川北路柳南路南约5米",
+      "equipment": "固定式交通技术监控设备（具体抓拍类型待核验）",
+      "applies_to_motorcycle": null,
+      "coordinate": null,
+      "photo_url": null,
+      "photo_taken_on": null,
+      "evidence_level": "candidate",
+      "review_note": "来自对政府公告的检索摘录；待人工对照原公告图表核对名称、距离、方向和设备类别。"
+    },
+    {
+      "id": "xuhui-20250828-03",
+      "source_id": "xuhui-20250828",
+      "location_text": "田林东路柳州路东约280米",
+      "equipment": "固定式交通技术监控设备（具体抓拍类型待核验）",
+      "applies_to_motorcycle": null,
+      "coordinate": null,
+      "photo_url": null,
+      "photo_taken_on": null,
+      "evidence_level": "candidate",
+      "review_note": "来自对政府公告的检索摘录；待人工对照原公告图表核对名称、距离、方向和设备类别。"
+    }
+  ]
+}
