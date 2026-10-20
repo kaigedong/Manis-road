@@ -16,7 +16,7 @@
 | `route` | `calPathAvoidSec` / `calPathAreaSec` | 避让区与电子眼的路线审计、polyline、AMap 坐标、离线直线规划 |
 | `vehicle` | 车辆表单与 `userCar` 接口 | 号牌解析、颜色/动力/变速枚举、校验 |
 | `store` | `SharedPreferences`/SQLite 的替代 | 单 JSON 文档持久化（原子写、schema 版本）、`deviceId` 与登录会话 |
-| `geo` | `AMapUtils` | 距离、方位角、夹角、多边形/线段相交 |
+| `geo` | `AMapUtils` | 距离、方位角、夹角、多边形/线段相交、GCJ-02 ↔ WGS-84 转换 |
 | `model` | `com.motu...model.*` | 电子眼、区域、请求/响应模型 |
 
 ## 运行

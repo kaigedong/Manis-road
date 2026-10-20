@@ -79,6 +79,14 @@
 当前是手动一次性同步；原版会随地图视野/巡航自动刷新，自动刷新与巡航模式尚未
 重写。
 
+## Web 调试台
+
+[`crates/motu-web`](../../crates/motu-web/README.md) 把同一条链路暴露给浏览器：
+Leaflet 使用 OpenStreetMap（WGS-84）瓦片，Rust 在 `/api/sync` 里把地图中心
+转换回 GCJ-02 再请求 `searchRulePoiSec`，并把返回点位和详情坐标转换为 WGS-84
+后交给页面。登录令牌只保存在本机 Rust 服务，浏览器拿不到；官方点位仍只存在
+进程内存中。演示点位同样是虚构坐标，未登录时只能查看演示说明。
+
 ## 电子眼详情（`load_camera_detail`）
 
 点击地图上的官方电子眼后，原版 `MotuMapViewModel.loadTrafficCameraDetail`

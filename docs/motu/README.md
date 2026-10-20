@@ -25,6 +25,7 @@ Rust 重写的取舍。分析产物位于 Git 忽略的 `var/motu/`。
 
 - [`crates/motu-core`](../../crates/motu-core/README.md)：纯 Rust 业务核心。
 - [`crates/motu-ffi`](../../crates/motu-ffi/README.md)：JNI JSON 桥。
+- [`crates/motu-web`](../../crates/motu-web/README.md)：本机 Web 调试台，登录/同步/详情仍走 `motu-core`，Leaflet 只负责渲染和地图交互。
 - [`android/`](../../android/README.md)：Java 界面与构建脚本。
 
 ## 数据与合规

@@ -1,0 +1,21 @@
+[package]
+name = "manis-motu-web"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Local web debugger for Motu electronic-eye data"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+axum = "0.8"
+manis-motu-core = { path = "../motu-core", features = ["http"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal"] }
+tower-http = { version = "0.6", features = ["fs", "set-header", "trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+tempfile = "3"
+tower = { version = "0.5", features = ["util"] }

@@ -36,7 +36,7 @@ pub use crypto::{
     md5_hex, safe_env_token, sign_json_body, sign_params, signing_certificate_md5,
 };
 pub use error::MotuError;
-pub use geo::LatLng;
+pub use geo::{LatLng, gcj02_to_wgs84, wgs84_to_gcj02};
 pub use model::{
     ApiEnvelope, CameraTabType, LoginUser, MapArea, MapAreaResult, MotuMapArea, PathAreaRequest,
     PathAvoidRequest, PathAvoidResult, PolylineStep, TrafficCamera,

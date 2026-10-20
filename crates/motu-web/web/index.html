@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Motu 电子眼调试台</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">M</div>
+      <div class="brand-copy">
+        <h1>Motu 电子眼调试台</h1>
+        <p class="brand-sub">上海 · Rust 核心 / Web UI</p>
+      </div>
+    </div>
+
+    <div class="topbar-meta">
+      <span id="source-badge" class="badge badge-demo">演示数据</span>
+      <span id="camera-count" class="muted">0 个点位</span>
+    </div>
+
+    <div class="topbar-actions">
+      <label class="city-field">
+        <span>城市码</span>
+        <input id="city-code" type="text" inputmode="numeric" maxlength="6" value="021" aria-label="城市码">
+      </label>
+      <button id="sync-button" class="button button-primary" type="button">同步官方点位</button>
+      <span id="account-status" class="account-status">未登录</span>
+      <button id="login-button" class="button button-ghost" type="button">登录</button>
+      <button id="logout-button" class="button button-ghost" type="button" hidden>退出</button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <section class="map-shell" aria-label="上海电子眼地图">
+      <div id="map"></div>
+
+      <div class="map-note">
+        <strong>拖动地图到目标区域</strong>
+        <span>再点「同步官方点位」。点击电子眼查看详情。</span>
+      </div>
+
+      <details class="legend">
+        <summary>图例</summary>
+        <ul>
+          <li><i style="--dot:#dc2626"></i>闯红灯</li>
+          <li><i style="--dot:#ea580c"></i>超速</li>
+          <li><i style="--dot:#d97706"></i>闯限行</li>
+          <li><i style="--dot:#2563eb"></i>公交车道</li>
+          <li><i style="--dot:#7c3aed"></i>非机动车道</li>
+          <li><i style="--dot:#ca8a04"></i>尾号限行</li>
+        </ul>
+      </details>
+
+      <div id="signature-hint" class="signature-hint" hidden>
+        未配置签名证书 MD5，官方接口可能拒绝请求。见 <code>crates/motu-web/README.md</code>。
+      </div>
+    </section>
+
+    <aside id="detail-panel" class="detail-panel" aria-live="polite">
+      <div class="detail-head">
+        <div>
+          <p class="eyebrow" id="detail-eyebrow">电子眼详情</p>
+          <h2 id="detail-title">选择一个电子眼</h2>
+        </div>
+        <button id="detail-close" class="icon-button" type="button" aria-label="关闭详情" title="关闭详情">×</button>
+      </div>
+      <div id="detail-body" class="detail-body">
+        <div class="empty-state">
+          <div class="empty-icon" aria-hidden="true">◎</div>
+          <p>地图上的圆点就是电子眼。</p>
+          <p class="muted">演示点位可直接点击查看说明；官方点位需要先登录并同步。</p>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="footer">
+    <span>坐标按 GCJ-02 ↔ WGS-84 转换后显示在 OpenStreetMap 上。</span>
+    <span>仅用于个人账号调试；官方点位不会写入磁盘。</span>
+  </footer>
+
+  <dialog id="login-dialog" class="dialog">
+    <form id="login-form" method="dialog">
+      <div class="dialog-head">
+        <div>
+          <p class="eyebrow">Motu 账号</p>
+          <h2>登录以同步官方点位</h2>
+        </div>
+        <button id="login-close" class="icon-button" type="button" aria-label="关闭登录框">×</button>
+      </div>
+      <p class="dialog-note">账号密码只发送到本机 Rust 服务；密码不会保存，登录令牌保存在本地调试数据目录。</p>
+      <label class="form-field">
+        <span>手机号</span>
+        <input id="login-phone" name="phone" type="tel" autocomplete="username" placeholder="请输入 Motu 手机号" required>
+      </label>
+      <label class="form-field">
+        <span>密码</span>
+        <input id="login-password" name="password" type="password" autocomplete="current-password" placeholder="请输入密码" required>
+      </label>
+      <p id="login-error" class="form-error" hidden></p>
+      <div class="dialog-actions">
+        <button id="login-cancel" class="button button-ghost" type="button">取消</button>
+        <button id="login-submit" class="button button-primary" type="submit">登录</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="/vendor/leaflet/leaflet.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

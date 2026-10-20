@@ -203,6 +203,11 @@ impl FileStore {
         let json = serde_json::to_vec_pretty(state)?;
         std::fs::write(&temp, &json)?;
         std::fs::rename(&temp, &path)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
+        }
         Ok(())
     }
 

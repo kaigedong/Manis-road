@@ -204,6 +204,92 @@ pub fn within_degrees(a: LatLng, b: LatLng, degrees: f64) -> bool {
     (a.latitude - b.latitude).abs() <= degrees && (a.longitude - b.longitude).abs() <= degrees
 }
 
+// `GCJ-02` is the obfuscated datum used by Chinese map providers such as
+// `AMap`. OSM and Leaflet use WGS-84, so the web debugger converts at the
+// boundary. The forward transform follows the widely used public
+// `coordtransform` formulas; the inverse iterates until it lands back on the
+// input within a fraction of a centimetre.
+const GCJ_A: f64 = 6_378_245.0;
+const GCJ_EE: f64 = 0.006_693_421_622_965_943;
+
+fn out_of_china(position: LatLng) -> bool {
+    !(72.004..=137.834_7).contains(&position.longitude)
+        || !(0.829_3..=55.827_1).contains(&position.latitude)
+}
+
+fn transform_lat(x: f64, y: f64) -> f64 {
+    let ret = -100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * x.abs().sqrt();
+    ret + (20.0 * (6.0 * x * std::f64::consts::PI).sin()
+        + 20.0 * (2.0 * x * std::f64::consts::PI).sin())
+        * 2.0
+        / 3.0
+        + (20.0 * (y * std::f64::consts::PI).sin() + 40.0 * (y / 3.0 * std::f64::consts::PI).sin())
+            * 2.0
+            / 3.0
+        + (160.0 * (y / 12.0 * std::f64::consts::PI).sin()
+            + 320.0 * (y * std::f64::consts::PI / 30.0).sin())
+            * 2.0
+            / 3.0
+}
+
+fn transform_lon(x: f64, y: f64) -> f64 {
+    let ret = 300.0 + x + 2.0 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * x.abs().sqrt();
+    ret + (20.0 * (6.0 * x * std::f64::consts::PI).sin()
+        + 20.0 * (2.0 * x * std::f64::consts::PI).sin())
+        * 2.0
+        / 3.0
+        + (20.0 * (x * std::f64::consts::PI).sin() + 40.0 * (x / 3.0 * std::f64::consts::PI).sin())
+            * 2.0
+            / 3.0
+        + (150.0 * (x / 12.0 * std::f64::consts::PI).sin()
+            + 300.0 * (x / 30.0 * std::f64::consts::PI).sin())
+            * 2.0
+            / 3.0
+}
+
+/// Convert a WGS-84 point (GPS / OSM) to `GCJ-02` (`AMap`).
+///
+/// Positions outside mainland China are returned unchanged.
+#[must_use]
+pub fn wgs84_to_gcj02(position: LatLng) -> LatLng {
+    if out_of_china(position) {
+        return position;
+    }
+    let x = position.longitude - 105.0;
+    let y = position.latitude - 35.0;
+    let delta_lat = transform_lat(x, y);
+    let delta_lon = transform_lon(x, y);
+    let rad_lat = position.latitude.to_radians();
+    let magic = 1.0 - GCJ_EE * rad_lat.sin().powi(2);
+    let sqrt_magic = magic.sqrt();
+    let lat =
+        delta_lat * 180.0 / (GCJ_A * (1.0 - GCJ_EE) / (magic * sqrt_magic) * std::f64::consts::PI);
+    let lon = delta_lon * 180.0 / (GCJ_A / sqrt_magic * rad_lat.cos() * std::f64::consts::PI);
+    LatLng::new(position.latitude + lat, position.longitude + lon)
+}
+
+/// Convert a `GCJ-02` point (`AMap`) to WGS-84 (GPS / OSM).
+///
+/// Positions outside mainland China are returned unchanged.
+#[must_use]
+pub fn gcj02_to_wgs84(position: LatLng) -> LatLng {
+    if out_of_china(position) {
+        return position;
+    }
+    let mut wgs = position;
+    for _ in 0..6 {
+        let converted = wgs84_to_gcj02(wgs);
+        let delta_lat = position.latitude - converted.latitude;
+        let delta_lon = position.longitude - converted.longitude;
+        wgs.latitude += delta_lat;
+        wgs.longitude += delta_lon;
+        if delta_lat.abs() < 1.0e-9 && delta_lon.abs() < 1.0e-9 {
+            break;
+        }
+    }
+    wgs
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -308,5 +394,29 @@ mod tests {
         assert!(!LatLng::new(91.0, 0.0).is_valid());
         assert!(!LatLng::new(0.0, 181.0).is_valid());
         assert!(people_square().is_valid());
+    }
+
+    #[test]
+    fn gcj_round_trip_returns_to_wgs84() {
+        let original = people_square();
+        let gcj = wgs84_to_gcj02(original);
+        let restored = gcj02_to_wgs84(gcj);
+        assert!((restored.latitude - original.latitude).abs() < 1.0e-7);
+        assert!((restored.longitude - original.longitude).abs() < 1.0e-7);
+    }
+
+    #[test]
+    fn gcj_offset_is_visible_in_shanghai() {
+        let original = people_square();
+        let gcj = wgs84_to_gcj02(original);
+        assert!((gcj.latitude - original.latitude).abs() > 0.001);
+        assert!((gcj.longitude - original.longitude).abs() > 0.001);
+    }
+
+    #[test]
+    fn gcj_conversion_is_identity_outside_china() {
+        let tokyo = LatLng::new(35.676_2, 139.650_3);
+        assert_eq!(wgs84_to_gcj02(tokyo), tokyo);
+        assert_eq!(gcj02_to_wgs84(tokyo), tokyo);
     }
 }

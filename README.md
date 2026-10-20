@@ -6,6 +6,7 @@ Rust workspace：
 - [`crates/camera-web`](crates/camera-web/README.md)：Rust/WASM 浏览器资料审核预览页，复用 `camera-catalog` 的数据模型与校验。
 - [`crates/motu-core`](crates/motu-core/README.md)：摩途 4.1.9 的业务核心重写（接口目录、签名/加密、登录、电子眼扫描、官方点位与详情、车辆、路线审计、本地状态）。
 - [`crates/motu-ffi`](crates/motu-ffi/README.md)：`motu-core` 的 JNI JSON 桥。
+- [`crates/motu-web`](crates/motu-web/README.md)：本机 Web 调试台；Leaflet 展示上海电子眼，登录/同步/详情全部经由 `motu-core`。
 - [`android/`](android/README.md)：仅含 Java 界面与构建脚本的 Android 工程，业务逻辑全部在 Rust。
 
 现阶段**没有已审核可上图的点位**；历史导航讨论稿在 [`docs/`](docs/) 下，尚非正式 PRD。
