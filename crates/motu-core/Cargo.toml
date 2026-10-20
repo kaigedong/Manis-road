@@ -1,0 +1,46 @@
+[package]
+name = "manis-motu-core"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Motorcycle navigation core recovered from Motu: models, camera alerts, request security, vehicles and route audit"
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "motu_core"
+path = "src/lib.rs"
+
+[dependencies]
+aes = "0.8"
+aes-gcm = "0.10"
+base64 = "0.22"
+cbc = { version = "0.1", features = ["alloc"] }
+hmac = "0.12"
+md-5 = "0.10"
+rand = "0.8"
+rsa = { version = "0.9", features = ["sha2", "pem"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha1 = "0.10"
+sha2 = "0.10"
+thiserror = "2"
+
+[features]
+default = []
+http = ["dep:reqwest"]
+
+[dependencies.reqwest]
+version = "0.12"
+optional = true
+default-features = false
+features = ["blocking", "rustls-tls", "json"]
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints.rust]
+unsafe_code = "warn"
+
+[lints.clippy]
+all = "warn"
+pedantic = "warn"

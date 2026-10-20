@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Manis Road</string>
+
+    <string name="dashboard_title">Manis Road · 摩途核心重建</string>
+    <string name="dashboard_note">界面为 Java，导航、电子眼、签名与车辆规则全部由 Rust 核心处理。</string>
+    <string name="status_placeholder">正在初始化核心…</string>
+    <string name="open_map">打开模拟导航</string>
+    <string name="open_vehicle">车辆资料</string>
+    <string name="open_settings">本地设置</string>
+    <string name="demo_disclaimer">演示数据为虚构坐标，不包含摩途电子眼或用户上报数据。</string>
+
+    <string name="map_title">模拟导航</string>
+    <string name="position_placeholder">模拟位置 —</string>
+    <string name="alert_placeholder">等待扫描</string>
+    <string name="no_alert">前方没有提醒</string>
+    <string name="alerts_disabled">电子眼提醒已在设置中关闭</string>
+    <string name="forward">前进 120 m</string>
+    <string name="turn">右转 90°</string>
+    <string name="audit">检查路线</string>
+    <string name="reset">重置</string>
+    <string name="turned">已转向 %1$d°</string>
+    <string name="audit_result">路线命中 %1$d 个电子眼</string>
+
+    <string name="sync_official">同步官方点位</string>
+    <string name="sync_official_in_progress">正在同步官方点位…</string>
+    <string name="sync_official_result">已同步 %1$d 个官方点位（仅当前会话，不写入仓库）</string>
+    <string name="sync_official_login_required">请先在首页登录官方账号，再同步官方数据</string>
+    <string name="sync_official_failed">同步失败：%1$s</string>
+    <string name="sync_official_empty">同步失败：官方返回空数据</string>
+    <string name="official_data_note">官方点位仅用于你本人授权的账号，不随应用分发；重启应用后需重新同步。</string>
+    <string name="official_city_code">官方点位城市代码</string>
+    <string name="official_city_code_hint">例如 010 北京、021 上海、020 广州、0755 深圳；留空回退 010</string>
+
+    <string name="camera_detail_title">电子摄像头</string>
+    <string name="camera_detail_loading">正在加载电子眼详情…</string>
+    <string name="camera_detail_loaded">电子眼详情已加载</string>
+    <string name="camera_detail_empty">电子眼详情为空</string>
+    <string name="camera_detail_failed">加载电子眼详情失败：%1$s</string>
+    <string name="camera_detail_login_required">请先登录官方账号，再查看电子眼详情</string>
+    <string name="camera_detail_demo_unavailable">演示点位没有官方详情；同步官方点位后可点击查看</string>
+    <string name="camera_detail_missing_id">该点位没有可用的官方详情 ID；请重新同步官方点位</string>
+    <string name="camera_detail_close">关闭</string>
+    <string name="camera_detail_tickets_header">罚单（已抓拍 %1$d 人）</string>
+    <string name="camera_detail_no_tickets">暂无罚单记录</string>
+    <string name="camera_detail_ticket_unknown">违章记录</string>
+    <string name="camera_detail_ticket_photo">（有现场照片）</string>
+    <string name="camera_detail_rule_plate">抓拍牌照：%1$s</string>
+    <string name="camera_detail_rule_days">时间段：%1$s</string>
+    <string name="camera_detail_rule_tail">尾号：%1$s</string>
+    <string name="camera_detail_rule_time">时间：%1$s</string>
+
+    <string name="vehicle_title">车辆资料</string>
+    <string name="plate">号牌</string>
+    <string name="plate_hint">例如 沪A12345</string>
+    <string name="displacement">排量（可选）</string>
+    <string name="displacement_hint">仅数字，例如 250</string>
+    <string name="plate_color">号牌颜色</string>
+    <string name="power_type">动力类型</string>
+    <string name="transmission">变速类型</string>
+    <string name="save_vehicle">保存车辆</string>
+    <string name="vehicle_empty">还没有车辆，请填写后保存。</string>
+    <string name="vehicle_invalid">车辆资料不完整</string>
+    <string name="vehicle_saved">车辆已保存</string>
+
+    <string name="settings_title">本地设置</string>
+    <string name="camera_alerts">启用电子眼提醒</string>
+    <string name="avoid_areas">启用避让区域</string>
+    <string name="api_base_url">接口地址（留空使用已恢复地址）</string>
+    <string name="api_base_url_hint">https://motu.motumap.com/</string>
+    <string name="radius_override">提醒半径覆盖（米，留空使用 300 / 500）</string>
+    <string name="radius_override_hint">1 – 5000</string>
+    <string name="save_settings">保存设置</string>
+    <string name="settings_saved">设置已保存</string>
+    <string name="settings_radius_invalid">提醒半径必须是 1 到 5000 之间的数字</string>
+
+    <string name="core_init_failed">核心初始化失败：%1$s</string>
+    <string name="native_error">核心错误：%1$s</string>
+
+    <string name="account_guest">未登录 · 本地功能可用</string>
+    <string name="account_logged_in">已登录：%1$s</string>
+    <string name="account_vip">VIP</string>
+    <string name="account_normal">普通用户</string>
+    <string name="login_button">登录官方账号</string>
+    <string name="logout_button">退出登录</string>
+    <string name="logout_in_progress">正在退出…</string>
+    <string name="logout_done">已退出登录</string>
+    <string name="logout_failed">本地会话已清除，服务器退出失败：%1$s</string>
+
+    <string name="login_title">登录摩途账号</string>
+    <string name="login_note">使用你自己的官方账号登录。密码只在 Rust 核心中做小写 MD5 后发送给官方服务，不会保存到本地。</string>
+    <string name="login_phone">手机号</string>
+    <string name="login_phone_hint">11 位手机号</string>
+    <string name="login_password">密码</string>
+    <string name="login_password_hint">账号密码</string>
+    <string name="login_submit">登录</string>
+    <string name="login_guest">暂不登录，使用本地功能</string>
+    <string name="login_in_progress">正在登录官方服务…</string>
+    <string name="login_success">登录成功</string>
+    <string name="login_failed">登录失败：%1$s</string>
+    <string name="login_required">请输入手机号和密码</string>
+    <string name="login_payment_note">VIP/支付必须走官方下单与支付渠道；本应用不绕过支付或伪造权益。</string>
+</resources>

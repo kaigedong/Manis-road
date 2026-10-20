@@ -1,4 +1,9 @@
 [workspace]
-members = ["crates/camera-catalog", "crates/camera-web"]
+members = [
+    "crates/camera-catalog",
+    "crates/camera-web",
+    "crates/motu-core",
+    "crates/motu-ffi",
+]
 default-members = ["crates/camera-catalog"]
 resolver = "3"

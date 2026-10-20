@@ -1,0 +1,29 @@
+[package]
+name = "manis-motu-ffi"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "JNI bridge between the Android UI and manis-motu-core"
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "motu_ffi"
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[dependencies]
+jni = "0.21"
+manis-motu-core = { path = "../motu-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[features]
+default = ["http"]
+http = ["manis-motu-core/http"]
+
+[lints.rust]
+unsafe_code = "warn"
+
+[lints.clippy]
+all = "warn"
+pedantic = "warn"

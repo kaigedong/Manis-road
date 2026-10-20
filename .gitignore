@@ -1,3 +1,14 @@
 /target/
 /crates/camera-web/pkg/
+/var/
+/task_plan.md
+/findings.md
+/progress.md
 .DS_Store
+
+/android/.gradle/
+/android/build/
+/android/app/build/
+/android/.cxx/
+/android/local.properties
+/android/app/src/main/jniLibs/
