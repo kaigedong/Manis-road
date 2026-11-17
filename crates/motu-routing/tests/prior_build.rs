@@ -3,6 +3,7 @@
 #![allow(
     clippy::cast_precision_loss,
     clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
     reason = "test coordinates and small counts are exact in f64"
 )]
 
@@ -128,7 +129,7 @@ fn too_few_samples_leave_the_bucket_at_one() {
         built.prior.buckets[0].factors.residential, 1.0,
         "an under-sampled cell must not invent a factor"
     );
-    assert!(!built.report.skipped_cells.is_empty());
+    assert!(built.report.skipped_cells.len() > 0);
 }
 
 #[test]

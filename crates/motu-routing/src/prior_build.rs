@@ -1,3 +1,9 @@
+#![allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_wrap,
+    reason = "sample counts, second gaps and metre distances are tiny compared to f64's mantissa"
+)]
+
 //! Turn recorded rides into a measured traffic prior.
 //!
 //! The goal allows two sources for the time-of-day prior: a free traffic API, or
@@ -22,6 +28,9 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Result, RoutingError};
 use crate::graph::{RoadGraph, haversine_m};
 use crate::traffic::{ClassFactors, PriorSource, TimeBucket, TrafficPrior};
+
+/// `(factor, observed km/h, free-flow km/h)` samples per cell and per bucket.
+type Samples = Vec<(f64, f64, f64)>;
 
 /// One GPS fix.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -224,19 +233,12 @@ pub struct HopReport {
 /// Snapping to the nearest *node* is not enough: at an intersection the rider may
 /// leave on any of the outgoing edges. The edge whose direction matches the hop
 /// wins, which is enough to attribute speed to the right class.
-fn classify_hop(graph: &RoadGraph, from: TracePoint, to: TracePoint) -> Option<(String, f64, f64)> {
-    match classify_hop_detailed(graph, from, to) {
-        Ok(found) => Some(found),
-        Err(_) => None,
-    }
-}
-
 fn classify_hop_detailed(
     graph: &RoadGraph,
     from: TracePoint,
     to: TracePoint,
 ) -> std::result::Result<(String, f64, f64), HopRejection> {
-    let mid = LatLng::new((from.lat + to.lat) / 2.0, (from.lon + to.lon) / 2.0);
+    let mid = LatLng::new(from.lat.midpoint(to.lat), from.lon.midpoint(to.lon));
     let (node, distance) = graph.nearest_node(mid).ok_or(HopRejection::NoNode)?;
     if distance > MAX_SNAP_M {
         return Err(HopRejection::TooFarFromRoad);
@@ -288,6 +290,11 @@ fn classify_hop_detailed(
 ///
 /// `buckets` defines the time windows to fill; only cells inside those windows are
 /// produced, so the output always covers the whole day.
+#[must_use]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one pass over the trace with the rejection bookkeeping kept together reads better than splitting"
+)]
 pub fn build_prior(
     graph: &RoadGraph,
     traces: &[TracePoint],
@@ -295,7 +302,7 @@ pub fn build_prior(
     min_samples: usize,
 ) -> BuiltPrior {
     // (hour, class) -> (factor, observed km/h, free-flow km/h) samples
-    let mut cells: BTreeMap<(u8, String), Vec<(f64, f64, f64)>> = BTreeMap::new();
+    let mut cells: BTreeMap<(u8, String), Samples> = BTreeMap::new();
     let mut usable_segments = 0_usize;
     let mut hops: Vec<HopReport> = Vec::new();
 
@@ -382,7 +389,7 @@ pub fn build_prior(
     ];
     let mut accepted = Vec::new();
     let mut skipped = Vec::new();
-    let mut by_bucket: BTreeMap<(u8, u8, String), (Vec<f64>, f64, f64)> = BTreeMap::new();
+    let mut by_bucket: BTreeMap<(u8, u8, String), Samples> = BTreeMap::new();
 
     for bucket in buckets {
         for hour in 0..24_u8 {
@@ -421,8 +428,7 @@ pub fn build_prior(
                 by_bucket
                     .entry((bucket.start_hour, bucket.end_hour, class.to_owned()))
                     .or_default()
-                    .0
-                    .push(factor);
+                    .push((factor, 0.0, 0.0));
             }
         }
     }
@@ -433,10 +439,11 @@ pub fn build_prior(
             let mut factors = ClassFactors::default();
             for class in classes {
                 let key = (bucket.start_hour, bucket.end_hour, class.to_owned());
-                if let Some((values, _, _)) = by_bucket.get(&key) {
-                    if !values.is_empty() {
-                        let mut values = values.clone();
-                        set_factor(&mut factors, class, median(&mut values));
+                if let Some(values) = by_bucket.get(&key) {
+                    let mut factors_only: Vec<f64> =
+                        values.iter().map(|(factor, _, _)| *factor).collect();
+                    if !factors_only.is_empty() {
+                        set_factor(&mut factors, class, median(&mut factors_only));
                     }
                 }
             }
@@ -517,7 +524,7 @@ mod tests {
         let built = build_prior(&graph, &[], &buckets, 1);
         assert_eq!(built.prior.source, PriorSource::Measured);
         assert_eq!(built.prior.buckets[0].factors.trunk, 1.0);
-        assert!(built.report.accepted_cells.is_empty());
+        assert_eq!(built.report.accepted_cells.len(), 0);
         assert_eq!(built.report.skipped_cells.len(), 6 * 6);
     }
 }
