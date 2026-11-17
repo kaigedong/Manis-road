@@ -117,4 +117,6 @@
     <string name="login_failed">登录失败：%1$s</string>
     <string name="login_required">请输入手机号和密码</string>
     <string name="login_payment_note">VIP/支付必须走官方下单与支付渠道；本应用不绕过支付或伪造权益。</string>
+    <string name="open_base_map">离线底图（MapLibre）</string>
+    <string name="base_map_attribution">© OpenStreetMap contributors (ODbL)</string>
 </resources>

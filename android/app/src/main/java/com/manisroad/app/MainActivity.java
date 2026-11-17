@@ -34,6 +34,8 @@ public final class MainActivity extends Activity {
                 new Intent(this, VehicleActivity.class)));
         findViewById(R.id.button_settings).setOnClickListener(view -> startActivity(
                 new Intent(this, SettingsActivity.class)));
+        findViewById(R.id.button_base_map).setOnClickListener(view -> startActivity(
+                new Intent(this, BaseMapActivity.class)));
 
         CoreResult init = MotuCore.ensureInit(this);
         if (!init.ok) {

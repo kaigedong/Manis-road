@@ -46,6 +46,24 @@ sdk.dir=/path/to/Android/sdk
 `build-rust.sh` 会从 `ANDROID_HOME` / `ANDROID_SDK_ROOT` / `~/Android/sdk`
 推断 SDK，用 `ANDROID_NDK_HOME` 或 `$SDK/ndk/27.0.12077973` 指定 NDK。
 
+## 离线底图（MapLibre Native）
+
+`BaseMapActivity` 用 MapLibre Native 渲染本机路网，数据是包内 `assets/roads.geojson`
+（由 `tools/map-preview/geojson-for-android.mjs` 从同一份 OSM 抽取生成）：
+
+```bash
+node tools/map-preview/geojson-for-android.mjs \
+  var/offline/roads-od.geojson android/app/src/main/assets/roads.geojson
+```
+
+入口：仪表盘「离线底图（MapLibre）」。`app/build.gradle.kts` 依赖
+`org.maplibre.gl:android-sdk:13.7.1`，`gradle.properties` 需要
+`android.useAndroidX=true`（MapLibre 引入 AndroidX）。
+
+为什么是 GeoJSON 而不是包里的 `tiles.pmtiles`：MapLibre Android 的矢量源只接受
+HTTP 模板或离线区包，没有内建 `pmtiles://` 协议；Web 端的 pmtiles 协议是 JS 实现。
+Android 接 PMTiles 需要一个 tile provider，尚未实现。
+
 ## 已验证
 
 在 `Manis_API_35`（arm64-v8a）模拟器上安装并运行：

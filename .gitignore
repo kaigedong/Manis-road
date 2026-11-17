@@ -12,3 +12,5 @@
 /android/.cxx/
 /android/local.properties
 /android/app/src/main/jniLibs/
+# 生成物：从 var/offline/roads-od.geojson 生成，见 android/README.md
+/android/app/src/main/assets/roads.geojson

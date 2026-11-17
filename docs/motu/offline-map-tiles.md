@@ -114,5 +114,8 @@ node tools/map-preview/serve.mjs var/offline 8089
 - ⚠️ **像素级渲染未验证**：本机 headless Chrome 的 WebGL 走 SwiftShader，
   `Page.captureScreenshot` 只拍到背景色，canvas 回读也没有道路——
   用正常桌面浏览器打开预览页可自行确认
-- ⛔ Android 端 MapLibre Native 接入尚未开始
+- 🟡 Android 端已接入 MapLibre Native（`BaseMapActivity`），但用的是同源 GeoJSON
+  （`assets/roads.geojson`，10.5 MB），**不是** `tiles.pmtiles`：
+  MapLibre Android 的矢量源只接受 HTTP 模板或离线区包，没有内建 `pmtiles://`
+  协议。APK 构建通过（30 MB，含 `libmaplibre.so`），真机运行未验证（设备未授权）
 - ⛔ 底图只有道路层：没有建筑、水系、地名标注（Overpass 只抓了 `highway`）

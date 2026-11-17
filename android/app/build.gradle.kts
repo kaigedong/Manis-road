@@ -38,3 +38,8 @@ android {
         buildConfig = false
     }
 }
+
+dependencies {
+    // 离线矢量底图渲染（MapLibre Native）。底图数据来自 .mrdp 包。
+    implementation("org.maplibre.gl:android-sdk:13.7.1")
+}
