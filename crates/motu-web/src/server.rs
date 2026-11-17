@@ -1796,6 +1796,7 @@ mod tests {
         ];
         let graph = RoadGraph {
             nodes,
+            signals: Vec::new(),
             ways: vec![WayInfo { name: "测试路".to_owned(), highway: "primary".to_owned() }],
             offsets: vec![0, 2, 4, 6, 8, 10],
             edges: vec![

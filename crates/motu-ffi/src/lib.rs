@@ -999,6 +999,7 @@ mod tests {
                 lat: 31.2304,
                 lon: 121.4737,
             }],
+            signals: Vec::new(),
             ways: Vec::new(),
             offsets: vec![0, 0],
             edges: Vec::new(),

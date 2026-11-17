@@ -225,6 +225,7 @@ mod tests {
             Edge { to: 1, distance_m: 150.0, speed_kmh: 30, way: 0 },
         ];
         RoadGraph {
+            signals: Vec::new(),
             nodes,
             ways,
             offsets: vec![0, 2, 4, 6, 8, 10],

@@ -57,6 +57,12 @@ fn run() -> Result<(), String> {
             if let Some((south, west, north, east)) = bounds {
                 println!("bounds {south:.5},{west:.5} .. {north:.5},{east:.5}");
             }
+            if graph.signals.is_empty() {
+                println!("signals unknown (graph predates signal data)");
+            } else {
+                let count = graph.signals.iter().filter(|flag| **flag).count();
+                println!("signals {count} of {} nodes", graph.signals.len());
+            }
         }
         "route" => {
             let input = args.next().ok_or_else(usage)?;
@@ -133,6 +139,7 @@ fn neutral_profile() -> RouteProfile {
             sharp_s: 0.0,
             u_turn_s: 0.0,
         },
+        signal_penalty_s: 0.0,
     }
 }
 

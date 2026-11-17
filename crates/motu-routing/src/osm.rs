@@ -57,11 +57,20 @@ pub fn build_from_osm_json(bytes: &[u8]) -> Result<(RoadGraph, OsmBuildReport)> 
         serde_json::from_slice(bytes).map_err(|error| RoutingError::Osm(error.to_string()))?;
 
     let mut coordinates: HashMap<i64, (f64, f64)> = HashMap::new();
+    let mut signal_nodes: std::collections::HashSet<i64> = std::collections::HashSet::new();
     let mut raw_ways: Vec<(Vec<i64>, HashMap<String, String>)> = Vec::new();
     for element in root.elements {
         match element {
-            Element::Node { id, lat, lon } => {
+            Element::Node {
+                id,
+                lat,
+                lon,
+                tags,
+            } => {
                 coordinates.insert(id, (lat, lon));
+                if is_signal(tags.get("highway").map_or("", String::as_str)) {
+                    signal_nodes.insert(id);
+                }
             }
             Element::Way { nodes, tags, .. } => raw_ways.push((nodes, tags)),
             Element::Relation {} => {}
@@ -98,6 +107,13 @@ pub fn build_from_osm_json(bytes: &[u8]) -> Result<(RoadGraph, OsmBuildReport)> 
                 .map_err(|_| RoutingError::Osm("too many nodes".to_owned()))?;
             node_index.insert(*id, index);
             nodes.push(GraphNode { id: *id, lat, lon });
+        }
+    }
+
+    let mut signals: Vec<bool> = vec![false; nodes.len()];
+    for (id, index) in &node_index {
+        if signal_nodes.contains(id) {
+            signals[*index as usize] = true;
         }
     }
 
@@ -158,6 +174,7 @@ pub fn build_from_osm_json(bytes: &[u8]) -> Result<(RoadGraph, OsmBuildReport)> 
     Ok((
         RoadGraph {
             nodes,
+            signals,
             ways,
             offsets,
             edges,
@@ -171,6 +188,12 @@ struct WayProfile {
     speed_kmh: u16,
     /// `1` forward only, `-1` backward only, `0` both ways.
     oneway: i8,
+}
+
+/// `highway=traffic_signals` is the only node tag we route on. `crossing` is a
+/// zebra or a push-button crossing, not a light, and would over-count.
+fn is_signal(highway: &str) -> bool {
+    highway == "traffic_signals"
 }
 
 fn way_info(tags: &HashMap<String, String>) -> WayInfo {
@@ -307,6 +330,8 @@ enum Element {
         lat: f64,
         #[serde(default)]
         lon: f64,
+        #[serde(default)]
+        tags: HashMap<String, String>,
     },
     #[serde(rename = "way")]
     Way {
@@ -360,6 +385,39 @@ mod tests {
         let (graph, report) = build_from_osm_json(&data).expect("build");
         assert_eq!(report.ways_used, 0);
         assert_eq!(graph.edge_count(), 0);
+    }
+
+    #[test]
+    fn marks_signalised_nodes_only() {
+        let data = json(serde_json::json!({
+            "elements": [
+                {"type": "node", "id": 1, "lat": 31.2300, "lon": 121.4700},
+                {"type": "node", "id": 2, "lat": 31.2310, "lon": 121.4710,
+                 "tags": {"highway": "traffic_signals"}},
+                {"type": "node", "id": 3, "lat": 31.2320, "lon": 121.4720,
+                 "tags": {"highway": "crossing"}},
+                {"type": "way", "id": 10, "nodes": [1, 2, 3],
+                 "tags": {"highway": "residential"}}
+            ]
+        }));
+        let (graph, _) = build_from_osm_json(&data).expect("build");
+        assert_eq!(
+            graph.signals.len(),
+            graph.nodes.len(),
+            "every node needs a flag to make the data complete"
+        );
+        let flagged: Vec<i64> = graph
+            .nodes
+            .iter()
+            .zip(&graph.signals)
+            .filter(|(_, flag)| **flag)
+            .map(|(node, _)| node.id)
+            .collect();
+        assert_eq!(
+            flagged,
+            vec![2],
+            "traffic_signals counts; a zebra crossing does not"
+        );
     }
 
     #[test]

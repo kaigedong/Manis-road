@@ -12,7 +12,9 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Result, RoutingError};
 
 const MAGIC: &[u8; 8] = b"MOTUGRPH";
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
+/// Version 1 had no signal data; it still loads, with `signals` left empty.
+const VERSION_LEGACY: u32 = 1;
 
 /// One graph node, keyed by the OSM node id.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -57,6 +59,12 @@ impl Edge {
 #[derive(Debug, Clone, Default)]
 pub struct RoadGraph {
     pub nodes: Vec<GraphNode>,
+    /// One flag per node: `true` when the node is a signalised junction.
+    ///
+    /// Empty means "this graph predates signal data" — callers must not read it
+    /// as "no signals", or the `≤ 3 slips/km` acceptance check would pass on a
+    /// graph that never measured them.
+    pub signals: Vec<bool>,
     pub ways: Vec<WayInfo>,
     /// `offsets[i]..offsets[i + 1]` indexes into `edges` for node `i`.
     pub offsets: Vec<u64>,
@@ -225,6 +233,11 @@ impl RoadGraph {
             writer.write_all(&node.lon.to_le_bytes())?;
         }
 
+        for node in 0..node_count as usize {
+            let flag = u8::from(self.signals.get(node).copied().unwrap_or(false));
+            writer.write_all(&[flag])?;
+        }
+
         let way_count = u32::try_from(self.ways.len())
             .map_err(|_| RoutingError::InvalidGraph("too many ways".to_owned()))?;
         writer.write_all(&way_count.to_le_bytes())?;
@@ -259,7 +272,7 @@ impl RoadGraph {
             return Err(RoutingError::InvalidGraph("bad magic".to_owned()));
         }
         let version = read_u32(&mut reader)?;
-        if version != VERSION {
+        if version != VERSION && version != VERSION_LEGACY {
             return Err(RoutingError::InvalidGraph(format!(
                 "unsupported version {version}"
             )));
@@ -272,6 +285,15 @@ impl RoadGraph {
             let lat = read_f64(&mut reader)?;
             let lon = read_f64(&mut reader)?;
             nodes.push(GraphNode { id, lat, lon });
+        }
+        let mut signals = Vec::new();
+        if version >= VERSION {
+            signals.reserve(node_count);
+            let mut byte = [0_u8; 1];
+            for _ in 0..node_count {
+                reader.read_exact(&mut byte)?;
+                signals.push(byte[0] != 0);
+            }
         }
 
         let way_count = read_u32(&mut reader)? as usize;
@@ -306,6 +328,7 @@ impl RoadGraph {
         }
         Ok(Self {
             nodes,
+            signals,
             ways,
             offsets,
             edges,
@@ -407,6 +430,7 @@ mod tests {
                     lon: 121.48,
                 },
             ],
+            signals: Vec::new(),
             ways: vec![WayInfo {
                 name: "测试路".to_owned(),
                 highway: "primary".to_owned(),
@@ -477,5 +501,27 @@ mod tests {
                 .len(),
             1
         );
+    }
+
+    #[test]
+    fn saves_and_loads_signal_flags() {
+        let graph = RoadGraph {
+            nodes: vec![
+                GraphNode { id: 1, lat: 31.230, lon: 121.470 },
+                GraphNode { id: 2, lat: 31.231, lon: 121.471 },
+            ],
+            signals: vec![false, true],
+            ways: vec![WayInfo { name: "路".to_owned(), highway: "residential".to_owned() }],
+            offsets: vec![0, 1, 1],
+            edges: vec![Edge { to: 1, distance_m: 100.0, speed_kmh: 30, way: 0 }],
+        };
+        let dir = std::env::temp_dir().join("motu-graph-signals-test");
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let path = dir.join("graph.bin");
+        graph.save(&path).expect("save");
+        let loaded = RoadGraph::load(&path).expect("load");
+        assert_eq!(loaded.signals, vec![false, true]);
+        assert_eq!(loaded.nodes.len(), 2);
+        std::fs::remove_file(&path).ok();
     }
 }

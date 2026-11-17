@@ -123,6 +123,12 @@ impl TurnPenalties {
 pub struct RouteProfile {
     pub classes: ClassWeights,
     pub turns: TurnPenalties,
+    /// Seconds charged for arriving at a signalised junction.
+    ///
+    /// Anecdotal-but-consistent: a light costs 10–20 s of waiting plus an
+    /// acceleration penalty. Ignoring it is why the old model happily routed
+    /// riders down arterials with a light every 200 m.
+    pub signal_penalty_s: f64,
 }
 
 impl Default for RouteProfile {
@@ -139,6 +145,7 @@ impl RouteProfile {
         Self {
             classes: ClassWeights::default(),
             turns: TurnPenalties::default(),
+            signal_penalty_s: 12.0,
         }
     }
 
@@ -184,6 +191,15 @@ mod tests {
                 "{highway} must not be discounted"
             );
         }
+    }
+
+    #[test]
+    fn signals_cost_real_time() {
+        let profile = RouteProfile::motorcycle_default();
+        assert!(
+            profile.signal_penalty_s >= 8.0,
+            "a signal must cost more than a gentle turn"
+        );
     }
 
     #[test]

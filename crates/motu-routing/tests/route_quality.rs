@@ -41,6 +41,7 @@ fn neutral_profile() -> RouteProfile {
             sharp_s: 0.0,
             u_turn_s: 0.0,
         },
+        signal_penalty_s: 0.0,
     }
 }
 
@@ -71,6 +72,7 @@ fn shortcut_vs_detour() -> RoadGraph {
     ];
     RoadGraph {
         nodes,
+        signals: Vec::new(),
         ways,
         offsets: vec![0, 2, 3, 3],
         edges,
@@ -103,6 +105,7 @@ fn straight_vs_bend() -> RoadGraph {
     ];
     RoadGraph {
         nodes,
+        signals: Vec::new(),
         ways,
         offsets: vec![0, 2, 3, 3, 4],
         edges,
@@ -195,5 +198,77 @@ fn metrics_do_not_claim_signal_coverage_the_graph_lacks() {
     assert_eq!(
         metrics.signals_per_km, None,
         "a graph without signal nodes must report unknown, not zero"
+    );
+}
+
+/// Two near-equal paths: the shorter one passes a signalised junction.
+fn signal_vs_detour(south_signalled: bool) -> RoadGraph {
+    let nodes = vec![
+        node(1, 31.2300, 121.4700), // A
+        node(2, 31.2300, 121.4750), // south midpoint (the light)
+        node(3, 31.2300, 121.4800), // D
+        node(4, 31.2320, 121.4750), // north midpoint
+    ];
+    let ways = vec![
+        WayInfo {
+            name: "南线".to_owned(),
+            highway: "residential".to_owned(),
+        },
+        WayInfo {
+            name: "北线".to_owned(),
+            highway: "residential".to_owned(),
+        },
+    ];
+    // CSR order: node 0 owns 0-1, node 1 owns 2, node 2 owns none, node 3 owns 3.
+    let edges = vec![
+        edge(1, 700.0, 30, 0),  // 0: A -> south midpoint
+        edge(3, 725.0, 30, 1),  // 1: A -> north midpoint
+        edge(2, 700.0, 30, 0),  // 2: south midpoint -> D
+        edge(2, 725.0, 30, 1),  // 3: north midpoint -> D
+    ];
+    RoadGraph {
+        nodes,
+        signals: vec![false, south_signalled, false, false],
+        ways,
+        offsets: vec![0, 2, 3, 3, 4],
+        edges,
+    }
+}
+
+#[test]
+fn a_signal_makes_the_shortcut_unattractive() {
+    let origin = LatLng::new(31.2300, 121.4700);
+    let destination = LatLng::new(31.2300, 121.4800);
+    let profile = RouteProfile::motorcycle_default();
+
+    // Without a light the shorter south line wins.
+    let clear = signal_vs_detour(false);
+    let (south_plan, _) = clear
+        .route_report(origin, destination, &profile, None)
+        .expect("route");
+    assert!(
+        south_plan
+            .points
+            .iter()
+            .any(|point| (point.latitude - 31.2300).abs() < 1e-6 && (point.longitude - 121.4750).abs() < 1e-6),
+        "the short south line should win when it is clear"
+    );
+
+    // Adding one light flips the choice to the slightly longer north line.
+    let lit = signal_vs_detour(true);
+    let (lit_plan, metrics) = lit
+        .route_report(origin, destination, &profile, None)
+        .expect("route");
+    assert!(
+        lit_plan
+            .points
+            .iter()
+            .any(|point| (point.latitude - 31.2320).abs() < 1e-6),
+        "the signalised shortcut must be avoided"
+    );
+    assert_eq!(
+        metrics.signals_per_km,
+        Some(0.0),
+        "the chosen route crosses no light, and the graph knows about lights"
     );
 }

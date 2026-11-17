@@ -267,7 +267,13 @@ impl RoadGraph {
             if camera.is_infinite() {
                 continue;
             }
-            let candidate = base_cost[index] * (1.0 + camera);
+            // The first edge can also arrive at a light; charge it here too.
+            let signal_penalty = if self.signals.get(edge.to as usize).copied() == Some(true) {
+                profile.signal_penalty_s
+            } else {
+                0.0
+            };
+            let candidate = base_cost[index] * (1.0 + camera) + signal_penalty;
             best[index] = candidate;
             let estimate = candidate
                 + heuristic(
@@ -307,9 +313,16 @@ impl RoadGraph {
                     continue;
                 }
                 let angle = normalize_degrees(f64::from(bearing_deg[next]) - turn_from).abs();
+                let signal_penalty = if self.signals.get(next_edge.to as usize).copied() == Some(true)
+                {
+                    profile.signal_penalty_s
+                } else {
+                    0.0
+                };
                 let cost = recorded
                     + base_cost[next] * (1.0 + camera)
-                    + profile.turns.for_angle(angle);
+                    + profile.turns.for_angle(angle)
+                    + signal_penalty;
                 if cost + 1e-6 >= best[next] {
                     continue;
                 }
@@ -526,6 +539,7 @@ mod tests {
         ];
         RoadGraph {
             nodes,
+            signals: Vec::new(),
             ways,
             offsets: vec![0, 1, 2, 3, 4],
             edges,

@@ -101,7 +101,8 @@ impl RouteMetrics {
 #[must_use]
 #[allow(
     clippy::cast_possible_truncation,
-    reason = "edge indexes fit the address space"
+    clippy::cast_precision_loss,
+    reason = "edge indexes and signal counts fit the address space"
 )]
 pub fn measure_edges(graph: &RoadGraph, edges: &[u64]) -> RouteMetrics {
     use std::collections::BTreeMap;
@@ -150,7 +151,26 @@ pub fn measure_edges(graph: &RoadGraph, edges: &[u64]) -> RouteMetrics {
         })
         .collect();
 
-    RouteMetrics::from_parts(distance_m, duration_s, classes, turn_count, u_turn_count)
+    let mut metrics =
+        RouteMetrics::from_parts(distance_m, duration_s, classes, turn_count, u_turn_count);
+
+    // Signal data exists only when the graph carries one flag per node.
+    if graph.signals.len() == graph.nodes.len() && !graph.nodes.is_empty() {
+        let signals = edges
+            .iter()
+            .filter(|index| {
+                graph
+                    .edges
+                    .get(**index as usize)
+                    .and_then(|edge| graph.signals.get(edge.to as usize))
+                    .copied()
+                    == Some(true)
+            })
+            .count();
+        let km = (distance_m / 1000.0).max(0.001);
+        metrics.signals_per_km = Some(signals as f64 / km);
+    }
+    metrics
 }
 
 /// The node an edge starts from.
@@ -214,6 +234,7 @@ mod tests {
             },
         ];
         RoadGraph {
+            signals: Vec::new(),
             nodes,
             ways,
             offsets: vec![0, 1, 2, 2],
