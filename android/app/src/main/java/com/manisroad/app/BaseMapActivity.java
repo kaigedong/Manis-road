@@ -704,9 +704,25 @@ public final class BaseMapActivity extends Activity {
         if (currentRoutePoints == null) {
             return;
         }
+        int nearest = nearestIndex(latitude, longitude);
+        double remaining = remainingFrom(nearest);
+
+        StringBuilder status = new StringBuilder();
+        if (remaining <= 30.0) {
+            status.append(getString(R.string.nav_arrived, routeTotalM / 1000.0));
+        } else {
+            int minutes = (int) Math.round(remaining / NAV_SPEED_MPS / 60.0);
+            status.append(getString(R.string.nav_running,
+                    remaining / 1000.0, minutes, (int) Math.round(NAV_SPEED_MPS * 3.6)));
+            status.append('\n').append(nextInstruction(nearest, deviation));
+        }
+        ((android.widget.TextView) findViewById(R.id.text_nav_status)).setText(status);
+    }
+
+    /** 当前定位在折线上最近的那个顶点。 */
+    private int nearestIndex(double latitude, double longitude) {
         int nearest = 0;
         double best = Double.MAX_VALUE;
-        double remaining = 0.0;
         for (int index = 0; index < currentRoutePoints.length(); index += 1) {
             JSONObject point = currentRoutePoints.optJSONObject(index);
             if (point == null) {
@@ -719,7 +735,12 @@ public final class BaseMapActivity extends Activity {
                 nearest = index;
             }
         }
-        for (int index = nearest; index + 1 < currentRoutePoints.length(); index += 1) {
+        return nearest;
+    }
+
+    private double remainingFrom(int fromIndex) {
+        double remaining = 0.0;
+        for (int index = fromIndex; index + 1 < currentRoutePoints.length(); index += 1) {
             JSONObject a = currentRoutePoints.optJSONObject(index);
             JSONObject b = currentRoutePoints.optJSONObject(index + 1);
             if (a == null || b == null) {
@@ -728,74 +749,39 @@ public final class BaseMapActivity extends Activity {
             remaining += distanceMeters(a.optDouble("latitude"), a.optDouble("longitude"),
                     b.optDouble("latitude"), b.optDouble("longitude"));
         }
-
-        StringBuilder status = new StringBuilder();
-        if (remaining <= 30.0) {
-            status.append(getString(R.string.nav_arrived, routeTotalM / 1000.0));
-        } else {
-            int minutes = (int) Math.round(remaining / NAV_SPEED_MPS / 60.0);
-            status.append(getString(R.string.nav_running,
-                    remaining / 1000.0, minutes, (int) Math.round(NAV_SPEED_MPS * 3.6)));
-            status.append('\n').append(nextInstruction(remaining, deviation));
-        }
-        ((android.widget.TextView) findViewById(R.id.text_nav_status)).setText(status);
+        return remaining;
     }
 
-    /** 用「总长 − 剩余」反推已走的距离，再找对应的那条转向指令。 */
-    private String nextInstruction(double remaining, double deviation) {
+    /**
+     * 下一步动作与它的距离。
+     *
+     * <p>用 step 的 {@code startIndex/endIndex} 对顶点的索引，而不是「总长 − 剩余」
+     * 去猜：累计里程和 steps 的分段里程本来就不是同一套数，之前那样取会取到
+     * 「出发，沿…」这种首段文案。这里改成「第一个 endIndex 还没走过的 step」。</p>
+     */
+    private String nextInstruction(int nearest, double deviation) {
         if (routeSteps == null || routeSteps.length() == 0) {
             return getString(R.string.nav_offset, Math.round(deviation));
         }
-        double travelled = routeTotalM - remaining;
-        double accumulated = 0.0;
         for (int index = 0; index < routeSteps.length(); index += 1) {
             JSONObject step = routeSteps.optJSONObject(index);
             if (step == null) {
                 continue;
             }
-            accumulated += step.optDouble("distanceM", 0.0);
-            if (travelled < accumulated) {
-                double before = accumulated - step.optDouble("distanceM", 0.0);
-                long ahead = Math.round(accumulated - travelled);
-                if (ahead <= 30) {
-                    return step.optString("instruction");
-                }
-                return getString(R.string.nav_next, ahead, step.optString("instruction"));
+            int endIndex = step.optInt("endIndex", 0);
+            if (endIndex <= nearest) {
+                continue;
             }
+            int startIndex = step.optInt("startIndex", nearest);
+            double ahead = startIndex > nearest ? remainingFrom(nearest) - remainingFrom(startIndex) : 0.0;
+            String instruction = step.optString("instruction");
+            if (ahead <= 30.0) {
+                return instruction;
+            }
+            return getString(R.string.nav_next, Math.round(ahead), instruction);
         }
         return getString(R.string.nav_last_leg);
     }
 
-
-
-    @Override
-    protected void onPause() {
-        super.onPause();
-        mapView.onPause();
-    }
-
-    @Override
-    protected void onStop() {
-        super.onStop();
-        mapView.onStop();
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        if (locationManager != null && locationListener != null) {
-            try {
-                locationManager.removeUpdates(locationListener);
-            } catch (SecurityException ignored) {
-                // 进程要退了，没权限也没关系。
-            }
-        }
-        mapView.onDestroy();
-    }
-
-    @Override
-    protected void onSaveInstanceState(Bundle outState) {
-        super.onSaveInstanceState(outState);
-        mapView.onSaveInstanceState(outState);
-    }
+    /** `CameraTabType` 的取值，这里只需要给骑手看懂的那几类。 */
 }

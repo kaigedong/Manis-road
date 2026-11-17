@@ -95,6 +95,18 @@ trunk / gravel / asphalt / footway
 `pmtiles` 的 JS 库直接读同一块瓦片也能拿到 15,889 字节（与上面 gzip 后大小一致），
 说明容器、目录与瓦片编码都是通的。
 
+## 读瓦片（Rust 侧）
+
+`motu-pack` 里有一个最小 PMTiles v3 读取器：解析头部、走目录树、按 z/x/y 取
+**原始 gzip 字节**（不重新压缩）。Android 换成真瓦片就靠它。
+
+```bash
+cargo run -p manis-motu-pack --bin motu-pack -- tile \
+  var/offline/roads-od.pmtiles 14 13719 6692 --out /tmp/t.mvt
+```
+
+与官方 `pmtiles` CLI 交叉比对，取出的瓦片逐字节一致。
+
 ## 预览页
 
 `tools/map-preview/index.html` 是一个只用 MapLibre GL JS + pmtiles 协议渲染

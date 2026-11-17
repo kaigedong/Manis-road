@@ -7,6 +7,8 @@
 //! motu-pack info    sh.mrdp
 //! motu-pack verify  sh.mrdp
 //! motu-pack extract sh.mrdp --out /tmp/unpacked
+//! motu-pack pmtiles-info  var/offline/roads-od.pmtiles
+//! motu-pack tile var/offline/roads-od.pmtiles 14 13719 6692 --out /tmp/t.mvt
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -34,6 +36,10 @@ const INPUTS: &[(&str, &str)] = &[
     ("--tiles", "tiles.pmtiles"),
 ];
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "one flat match over CLI subcommands reads better than a dispatch table"
+)]
 fn run() -> Result<(), String> {
     let mut args = std::env::args().skip(1);
     let command = args.next().ok_or_else(usage)?;
@@ -54,6 +60,69 @@ fn run() -> Result<(), String> {
                 reader.manifest().entries.len(),
                 reader.manifest().entries.iter().map(|e| e.length).sum::<u64>()
             );
+            Ok(())
+        }
+        "pmtiles-info" => {
+            let path = PathBuf::from(args.next().ok_or_else(usage)?);
+            let tiles = motu_pack::pmtiles::TileSet::open(&path).map_err(|error| error.to_string())?;
+            let header = tiles.header();
+            println!("pmtiles spec v{}", header.spec_version);
+            println!(
+                "zoom {}-{}  tile type {}  tile compression {}  internal compression {}",
+                header.min_zoom,
+                header.max_zoom,
+                header.tile_type,
+                header.tile_compression,
+                header.internal_compression
+            );
+            println!(
+                "addressed tiles {}  archive {} bytes  tile data {} bytes",
+                header.addressed_tiles,
+                tiles.len(),
+                tiles.tile_data_length()
+            );
+            Ok(())
+        }
+        "tile" => {
+            let path = PathBuf::from(args.next().ok_or_else(usage)?);
+            let zoom: u8 = args
+                .next()
+                .ok_or_else(usage)?
+                .parse()
+                .map_err(|error| format!("bad zoom: {error}"))?;
+            let x: u32 = args
+                .next()
+                .ok_or_else(usage)?
+                .parse()
+                .map_err(|error| format!("bad x: {error}"))?;
+            let y: u32 = args
+                .next()
+                .ok_or_else(usage)?
+                .parse()
+                .map_err(|error| format!("bad y: {error}"))?;
+            let mut out: Option<PathBuf> = None;
+            while let Some(flag) = args.next() {
+                match flag.as_str() {
+                    "--out" => out = Some(PathBuf::from(args.next().ok_or_else(usage)?)),
+                    other => return Err(format!("unknown flag {other}")),
+                }
+            }
+            let tiles = motu_pack::pmtiles::TileSet::open(&path).map_err(|error| error.to_string())?;
+            let bytes = tiles
+                .tile(zoom, x, y)
+                .map_err(|error| error.to_string())?
+                .ok_or_else(|| format!("tile {zoom}/{x}/{y} not in archive"))?;
+            if let Some(path) = out {
+                {
+                    std::fs::write(&path, bytes).map_err(|error| format!("{}: {error}", path.display()))?;
+                    println!("{} bytes -> {}", bytes.len(), path.display());
+                }
+            } else {
+                use std::io::Write as _;
+                std::io::stdout()
+                    .write_all(bytes)
+                    .map_err(|error| format!("stdout: {error}"))?;
+            }
             Ok(())
         }
         "extract" => {

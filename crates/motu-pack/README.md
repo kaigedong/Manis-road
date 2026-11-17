@@ -65,6 +65,37 @@ let graph = motu_routing::RoadGraph::from_bytes(package.entry("graph.bin")?)?;
 | 版本高于实现 | `unsupported package format version N` |
 | 重名条目 | 打包时拒绝 |
 
+## 读瓦片（给 Android 用）
+
+```bash
+motu-pack pmtiles-info var/offline/roads-od.pmtiles
+motu-pack tile var/offline/roads-od.pmtiles 14 13719 6692 --out /tmp/t.mvt
+```
+
+```text
+pmtiles spec v3
+zoom 8-15  tile type 1  tile compression 2  internal compression 2
+addressed tiles 793  archive 4650307 bytes  tile data 4646757 bytes
+```
+
+读出来的是**原样的 gzip 瓦片字节**（不重新压缩），交给瓦片客户端当
+`Content-Encoding: gzip` 直接解。
+
+## 踩过三个坑（都写进代码注释了）
+
+1. **压缩枚举**：`1 = none, 2 = gzip, 3 = brotli`。按 `1 = gzip` 写会解压失败——
+   实测文件头字节是 2，瓦片以 `1f 8b` 开头。
+2. **目录是列式编码**：条目数 → 所有 TileID 增量 → 所有 RunLength → 所有 Length
+   → 所有 Offset，不是逐条四连。按交叉读会得到「看起来合理」的垃圾。
+3. **Offset 紧凑编码**：`0` 表示紧接上一条（数据连续），否则是 `offset + 1`。
+4. 另外 Hilbert 的旋转用的是整幅边长 `2^zoom`，不是当前的步长。
+
+## 验证
+
+- 与官方 `pmtiles` CLI 交叉比对：z13/6860/3346、z14/13719/6692、z14/13720/6693
+  解出的瓦片**逐字节一致**
+- 单元测试含手工构造的最小归档、Hilbert 双射、真实文件读取（文件不在时跳过）
+
 ## 还没做
 
 - `tiles.pmtiles` 只是预留条目名，PMTiles 生成与 MapLibre 渲染尚未实现

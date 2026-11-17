@@ -23,6 +23,8 @@
 // Fallible APIs document their errors on the type, not on every method.
 #![allow(clippy::missing_errors_doc)]
 
+pub mod pmtiles;
+
 use std::fmt::Write as _;
 use std::path::Path;
 
@@ -90,6 +92,8 @@ pub enum PackError {
     BadVersion(u32),
     #[error("manifest is invalid: {0}")]
     Manifest(String),
+    #[error("{0}")]
+    Format(String),
     #[error("entry {0} is missing")]
     MissingEntry(String),
     #[error("entry {name} is out of bounds")]
