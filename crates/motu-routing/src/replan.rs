@@ -109,30 +109,40 @@ impl ReplanState {
         let since_switch = self
             .last_switch
             .map(|last| now.saturating_duration_since(last));
-
-        if deviation_m > policy.deviation_m {
-            let cooled_down = since_switch.is_none_or(|age| age >= policy.deviation_cooldown);
-            if !cooled_down {
-                return None;
-            }
-            return Some(self.record(now, ReplanReason::Deviation));
-        }
-
-        let candidate = candidate?;
-        let interval_ok = since_switch.is_none_or(|age| age >= policy.min_interval);
-        let enough_gain = candidate.improvement >= policy.improvement;
-        let materially_different = candidate.overlap <= policy.max_overlap;
-        if interval_ok && enough_gain && materially_different {
-            return Some(self.record(now, ReplanReason::BetterRoute));
-        }
-        None
+        let reason = evaluate_after(policy, since_switch, deviation_m, candidate)?;
+        self.record(now, reason);
+        Some(reason)
     }
 
-    fn record(&mut self, now: Instant, reason: ReplanReason) -> ReplanReason {
+    fn record(&mut self, now: Instant, reason: ReplanReason) {
+        let _ = reason;
         self.last_switch = Some(now);
         self.switches += 1;
-        reason
     }
+}
+
+/// The controller's decision, without the state machine.
+///
+/// `since_switch` is the age of the last route switch; `None` means "never
+/// switched". Kept separate so FFI callers can drive the same policy without
+/// owning a [`ReplanState`].
+#[must_use]
+pub fn evaluate_after(
+    policy: &ReplanPolicy,
+    since_switch: Option<Duration>,
+    deviation_m: f64,
+    candidate: Option<Candidate>,
+) -> Option<ReplanReason> {
+    if deviation_m > policy.deviation_m {
+        let cooled_down = since_switch.is_none_or(|age| age >= policy.deviation_cooldown);
+        return cooled_down.then_some(ReplanReason::Deviation);
+    }
+
+    let candidate = candidate?;
+    let interval_ok = since_switch.is_none_or(|age| age >= policy.min_interval);
+    let enough_gain = candidate.improvement >= policy.improvement;
+    let materially_different = candidate.overlap <= policy.max_overlap;
+    (interval_ok && enough_gain && materially_different).then_some(ReplanReason::BetterRoute)
 }
 
 /// Share of `current` that lies within `tolerance_m` of the `candidate` line.

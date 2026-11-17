@@ -308,6 +308,43 @@ cd android && ./gradlew assembleDebug
 **装不上**：连接的设备 `AN5UUT5B12019436` 处于 `unauthorized`，需要手机上点一次
 「允许 USB 调试」。装上去之后才能验证真机断网行为。
 
+## 第 11 轮：真机偏航重算
+
+Rust 侧的 `ReplanPolicy` 已经通过 `evaluate_after()` 抽成纯函数，JNI 直接把同一套
+策略暴露给 Android，避免 Java 里再抄一遍阈值。
+
+新增 JNI：
+
+| 函数 | 作用 |
+|---|---|
+| `nativeDeviation(points, lat, lon)` | 当前位置到折线的距离（偏航量） |
+| `nativeReplanDecision(dev, gain, overlap, msSinceSwitch, hasCandidate)` | 走 `evaluate_after`，返回是否重算与原因 |
+| `nativeRouteOverlap(a, b)` | 两条路线重合度（50 m 容差） |
+| `nativeRouteFlicker(ref, fresh, lat, lon)` | 只对比「参考路线从最近点往后的那段」，避免把已骑过的部分算成抖动 |
+
+`BaseMapActivity` 里加了一个「模拟 5 次偏航」检查（规划完成后自动跑一次）：
+每次从当前路线中段沿垂直方向推开 120 m，量出实际偏航距离，交给决策函数，再重算并计时。
+
+真机结果（Honor，2026-11-17，graph-od.bin，人民广场→陆家嘴）：
+
+```text
+重算 5/5 次，最慢 91 ms，越界切换 0 次（预算 3000 ms / 允许 1 次）
+#1 偏航 120 m → deviation，重算 91 ms，重合度 0.85
+#2 偏航  73 m → deviation，重算 91 ms，重合度 0.77
+#3 偏航  61 m → deviation，重算 74 ms，重合度 0.97
+#4 偏航 120 m → deviation，重算 68 ms，重合度 0.51
+#5 偏航 117 m → deviation，重算 66 ms，重合度 0.68
+```
+
+截图：[`images/android-replan.png`](images/android-replan.png)
+
+**这个指标的定义要说清楚**：跳变指的是「不该切换却切换了」（偏航没到 50 m 或候选不够好），
+而不是「新路线和旧路线长得不一样」——真偏航之后路线本来就该变。#4 的重合度 0.51 就是
+一次合理的改道，不算抖动。
+
+**这套检查没覆盖的**：候选路线触发的切换（省 8% 且重合度 ≤0.7 且距上次切换 ≥15 s）
+在真机上没有被触发过，那条路径目前只有 Rust 单测覆盖；也没有用真实 GPS 轨迹跑过。
+
 ## 还没做
 
 - 实测时段先验（需高德路况 key 或骑行轨迹；当前只有 assumption 占位）

@@ -13,7 +13,7 @@
 use std::{
     path::Path,
     sync::{Mutex, OnceLock},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use jni::JNIEnv;
@@ -29,7 +29,10 @@ use motu_core::{
     login as auth_login, logout as auth_logout, parse_amap_positions, safe_env_token,
     signing_certificate_md5, sync_official_cameras,
 };
-use motu_routing::{CameraDeterrent, RoadGraph, cameras_within};
+use motu_routing::{
+    CameraDeterrent, Candidate, ReplanPolicy, ReplanReason, RoadGraph, cameras_within,
+    evaluate_after, route_overlap,
+};
 use serde_json::{Map, Value, json};
 
 /// Graph loaded on demand; Android keeps `graph.bin` in its files directory.
@@ -981,6 +984,133 @@ pub extern "system" fn Java_com_manisroad_app_core_MotuCore_nativeLoadCameraDeta
             let _ = (&base_url, &headers, &camera_id);
             Err("networking is not enabled in this build".to_owned())
         }
+    })();
+    jstring_out(&mut env, result.unwrap_or_else(err))
+}
+
+/// `nativeDeviation(pointsJson, lat, lon)`: how far a position is from a route.
+///
+/// Used by the on-device re-planning check: "off-route by more than 50 m" has to
+/// be measured against the polyline, not against the previous waypoint.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_manisroad_app_core_MotuCore_nativeDeviation(
+    mut env: JNIEnv,
+    _class: JClass,
+    points_json: JString,
+    latitude: jdouble,
+    longitude: jdouble,
+) -> jstring {
+    let result: Result<String, String> = (|| {
+        let text = string_arg(&mut env, &points_json)?;
+        let points: Vec<LatLng> = parse_json(&text, "points")?;
+        let position = LatLng::new(latitude, longitude);
+        let distance = motu_core::geo::distance_to_polyline_m(position, &points)
+            .ok_or_else(|| "route has fewer than two points".to_owned())?;
+        Ok(ok(json!({ "distanceM": distance })))
+    })();
+    jstring_out(&mut env, result.unwrap_or_else(err))
+}
+
+/// `nativeReplanDecision(deviationM, improvement, overlap, msSinceSwitch, hasCandidate)`.
+///
+/// `msSinceSwitch` is negative when the controller never switched before.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_manisroad_app_core_MotuCore_nativeReplanDecision(
+    mut env: JNIEnv,
+    _class: JClass,
+    deviation_m: jdouble,
+    improvement: jdouble,
+    overlap: jdouble,
+    ms_since_switch: jdouble,
+    has_candidate: jboolean,
+) -> jstring {
+    // 这个决策不会失败：参数都是数值，没有可返回的错误分支。
+    let policy = ReplanPolicy::default();
+    let since_switch = if ms_since_switch >= 0.0 {
+        Duration::try_from_secs_f64(ms_since_switch / 1000.0).ok()
+    } else {
+        None
+    };
+    let candidate = (has_candidate != 0).then_some(Candidate {
+        improvement,
+        overlap,
+    });
+    let decision = evaluate_after(&policy, since_switch, deviation_m, candidate);
+    let reason = match decision {
+        Some(ReplanReason::Deviation) => "deviation",
+        Some(ReplanReason::BetterRoute) => "betterRoute",
+        None => "keep",
+    };
+    jstring_out(
+        &mut env,
+        ok(json!({
+            "replan": decision.is_some(),
+            "reason": reason,
+            "deviationThresholdM": policy.deviation_m,
+            "improvementThreshold": policy.improvement,
+            "maxOverlap": policy.max_overlap,
+            "minIntervalMs": policy.min_interval.as_millis(),
+        })),
+    )
+}
+
+/// `nativeRouteOverlap(aPointsJson, bPointsJson)`: share of route A within 50 m of B.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_manisroad_app_core_MotuCore_nativeRouteOverlap(
+    mut env: JNIEnv,
+    _class: JClass,
+    a_points_json: JString,
+    b_points_json: JString,
+) -> jstring {
+    let result: Result<String, String> = (|| {
+        let a_text = string_arg(&mut env, &a_points_json)?;
+        let b_text = string_arg(&mut env, &b_points_json)?;
+        let a: Vec<LatLng> = parse_json(&a_text, "pointsA")?;
+        let b: Vec<LatLng> = parse_json(&b_text, "pointsB")?;
+        Ok(ok(json!({ "overlap": route_overlap(&a, &b, 50.0) })))
+    })();
+    jstring_out(&mut env, result.unwrap_or_else(err))
+}
+
+/// `nativeRouteFlicker(referenceJson, freshJson, lat, lon)`: how much the route
+/// really changed after re-planning at `(lat, lon)`.
+///
+/// Comparing a re-planned route against the *whole* previous route is wrong when
+/// the new route starts mid-way: the part already ridden is gone, so overlap
+/// collapses for reasons that have nothing to do with flicker. The honest
+/// comparison is against the remaining tail, starting at the nearest vertex.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_manisroad_app_core_MotuCore_nativeRouteFlicker(
+    mut env: JNIEnv,
+    _class: JClass,
+    reference_json: JString,
+    fresh_json: JString,
+    latitude: jdouble,
+    longitude: jdouble,
+) -> jstring {
+    let result: Result<String, String> = (|| {
+        let reference_text = string_arg(&mut env, &reference_json)?;
+        let fresh_text = string_arg(&mut env, &fresh_json)?;
+        let reference: Vec<LatLng> = parse_json(&reference_text, "reference")?;
+        let fresh: Vec<LatLng> = parse_json(&fresh_text, "fresh")?;
+        let position = LatLng::new(latitude, longitude);
+        let nearest = reference
+            .iter()
+            .enumerate()
+            .min_by(|(_, a), (_, b)| {
+                let da = motu_routing::graph::haversine_m(position.latitude, position.longitude, a.latitude, a.longitude);
+                let db = motu_routing::graph::haversine_m(position.latitude, position.longitude, b.latitude, b.longitude);
+                da.total_cmp(&db)
+            })
+            .map(|(index, _)| index)
+            .ok_or_else(|| "reference route is empty".to_owned())?;
+        let tail = &reference[nearest..];
+        let overlap = if tail.len() >= 2 {
+            route_overlap(&fresh, tail, 50.0)
+        } else {
+            1.0
+        };
+        Ok(ok(json!({ "overlap": overlap, "tailIndex": nearest, "tailPoints": tail.len() })))
     })();
     jstring_out(&mut env, result.unwrap_or_else(err))
 }

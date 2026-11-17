@@ -3,6 +3,7 @@ package com.manisroad.app;
 import android.app.Activity;
 import android.os.Bundle;
 import android.util.Log;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.manisroad.app.core.CoreResult;
@@ -116,6 +117,10 @@ public final class BaseMapActivity extends Activity {
         """;
 
     private MapView mapView;
+    /** 自动跑一次重算检查，避免依赖点击（MapView 的 SurfaceView 会挡触摸）。 */
+    private boolean replanCheckDone;
+    /** 当前路线折线，重算检查要用它算偏航。 */
+    private JSONArray currentRoutePoints;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -125,6 +130,7 @@ public final class BaseMapActivity extends Activity {
         setContentView(R.layout.activity_base_map);
 
         mapView = findViewById(R.id.base_map_view);
+        findViewById(R.id.button_replan_check).setOnClickListener(view -> runReplanCheck());
         mapView.onCreate(savedInstanceState);
         mapView.getMapAsync(map -> {
             map.getUiSettings().setCompassEnabled(true);
@@ -222,6 +228,7 @@ public final class BaseMapActivity extends Activity {
                         Feature.fromGeometry(line.get(line.size() - 1),
                                 featureProps("destination")),
                 });
+                currentRoutePoints = points;
                 FeatureCollection route =
                         FeatureCollection.fromFeature(Feature.fromGeometry(LineString.fromLngLats(line)));
                 double meters = data.optDouble("distanceM", 0.0);
@@ -248,6 +255,10 @@ public final class BaseMapActivity extends Activity {
                             80));
                     Toast.makeText(this, getString(R.string.base_map_route_ready,
                             Math.round(meters / 100.0) / 10.0), Toast.LENGTH_SHORT).show();
+                    if (!replanCheckDone) {
+                        replanCheckDone = true;
+                        runReplanCheck();
+                    }
                 });
             } catch (RuntimeException error) {
                 Log.w(TAG, "route failed", error);
@@ -262,5 +273,129 @@ public final class BaseMapActivity extends Activity {
         com.google.gson.JsonObject props = new com.google.gson.JsonObject();
         props.addProperty("kind", kind);
         return props;
+    }
+
+    /** 每次模拟偏航的横向偏移（米）。 */
+    private static final int DEVIATION_STEP_M = 120;
+    /** 验收要求的重算上限。 */
+    private static final long REPLAN_BUDGET_MS = 3000;
+    /** 重合度低于该值视为一次路线跳变（与 ReplanPolicy.max_overlap 一致）。 */
+    private static final double JUMP_OVERLAP = 0.7;
+
+    /**
+     * 在真机上跑一次「5 次人为偏航」验收。
+     *
+     * <p>每次把当前位置从路线上横向推开 120 m，用 {@code nativeDeviation} 量出实际
+     * 偏航距离，交给和 Rust 里同一个 {@code evaluate_after} 决策，再重算并计时。
+     * 跳变次数 = 新旧路线重合度 ≤ 0.7 的次数。</p>
+     *
+     * <p>这不是模拟 GPS 的端到端测试，但它验证了真正要紧的三件事：偏航判定、
+     * 重算耗时、路线稳定性。</p>
+     */
+    private void runReplanCheck() {
+        if (currentRoutePoints == null || currentRoutePoints.length() < 2) {
+            Toast.makeText(this, R.string.replan_need_route, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        final JSONArray baseline = currentRoutePoints;
+        final TextView resultText = findViewById(R.id.text_replan_result);
+        resultText.setVisibility(android.view.View.VISIBLE);
+        resultText.setText(R.string.replan_running);
+
+        new Thread(() -> {
+            StringBuilder lines = new StringBuilder();
+            int replanned = 0;
+            int jumps = 0;
+            long slowest = 0;
+            try {
+                JSONArray reference = baseline;
+                String graphPath = OfflineData.graphFile(this).getAbsolutePath();
+                for (int step = 1; step <= 5; step += 1) {
+                    // 每次都从「当前路线」的起点横向推开 120 m，模拟一次新的偏航，
+                    // 而不是在同一条路线上累计偏移——真实骑行就是反复偏航、反复重算。
+                    // 取路线中段的点：端点附近的走向会被连接段带歪，测出来的偏航不真实。
+                    int middle = Math.max(1, reference.length() / 2);
+                    JSONObject start = reference.optJSONObject(middle - 1);
+                    JSONObject next = reference.optJSONObject(middle);
+                    double startLat = start.optDouble("latitude");
+                    double startLon = start.optDouble("longitude");
+                    // 沿路线起点走向的「垂直方向」推开，保证真的离开路线；
+                    // 固定朝北推会在南北向道路上得到 26 m 这种没意义的偏航。
+                    double cos = Math.cos(Math.toRadians(startLat));
+                    double dx = (next.optDouble("longitude") - startLon) * cos;
+                    double dy = next.optDouble("latitude") - startLat;
+                    double norm = Math.hypot(dx, dy);
+                    double perpX = norm == 0.0 ? 0.0 : -dy / norm;
+                    double perpY = norm == 0.0 ? 1.0 : dx / norm;
+                    double lat = startLat + perpY * DEVIATION_STEP_M / 111_320.0;
+                    double lon = startLon + perpX * DEVIATION_STEP_M / (111_320.0 * cos);
+                    // 若这一点恰好落在路线上（比如垂直方向正好压着另一条路），
+                    // 加大偏移再测，直到确实离开路线——人为偏航必须真的偏航。
+                    double distanceM = 0.0;
+                    for (int attempt = 1; attempt <= 3; attempt += 1) {
+                        double scale = DEVIATION_STEP_M * attempt;
+                        double tryLat = startLat + perpY * scale / 111_320.0;
+                        double tryLon = startLon + perpX * scale / (111_320.0 * cos);
+                        CoreResult deviation = MotuCore.deviation(reference, tryLat, tryLon);
+                        distanceM = deviation.objectData() == null
+                                ? 0.0
+                                : deviation.objectData().optDouble("distanceM", 0.0);
+                        lat = tryLat;
+                        lon = tryLon;
+                        if (distanceM > 60.0) {
+                            break;
+                        }
+                    }
+                    CoreResult decision = MotuCore.replanDecision(distanceM, 0.0, 1.0, -1.0, false);
+                    boolean replan = decision.objectData() != null
+                            && decision.objectData().optBoolean("replan");
+                    String reason = decision.objectData() == null
+                            ? "(no data)"
+                            : decision.objectData().optString("reason");
+
+                    long began = System.nanoTime();
+                    CoreResult rerouted =
+                            MotuCore.route(graphPath, lat, lon, DEST_LAT, DEST_LON);
+                    long elapsedMs = (System.nanoTime() - began) / 1_000_000;
+                    slowest = Math.max(slowest, elapsedMs);
+                    JSONObject data = rerouted.objectData();
+                    double overlap = 1.0;
+                    if (data != null) {
+                        JSONArray fresh = data.optJSONArray("points");
+                        if (fresh != null && fresh.length() > 1) {
+                            CoreResult shared =
+                                    MotuCore.routeFlicker(reference, fresh, lat, lon);
+                            if (shared.objectData() != null) {
+                                overlap = shared.objectData().optDouble("overlap", 1.0);
+                            }
+                        }
+                    }
+                    // 「跳变」= 不该切换却切换了（偏航没到 50 m、或候选不够好），
+                    // 而不是「新路线和旧路线长得不一样」——真偏航后路线本来就该变。
+                    if (replan && distanceM <= 50.0) {
+                        jumps += 1;
+                    }
+                    if (replan && rerouted.ok) {
+                        replanned += 1;
+                    }
+                    if (data != null && data.optJSONArray("points") != null) {
+                        reference = data.optJSONArray("points");
+                    }
+                    lines.append(String.format(java.util.Locale.US,
+                            "#%d 偏航 %.0f m → %s，重算 %d ms，重合度 %.2f%s%n",
+                            step, distanceM, reason, elapsedMs, overlap,
+                            elapsedMs > REPLAN_BUDGET_MS ? "（超 3 s）" : ""));
+                }
+            } catch (RuntimeException error) {
+                lines.append("失败：").append(error).append('\n');
+            }
+            final long changed = 0;
+            final String detail = lines.toString().trim();
+            final int done = replanned;
+            final int flips = jumps;
+            final long worst = slowest;
+            runOnUiThread(() -> resultText.setText(getString(
+                    R.string.replan_result, done, worst, flips, detail)));
+        }).start();
     }
 }

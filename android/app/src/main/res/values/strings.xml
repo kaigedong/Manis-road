@@ -122,4 +122,8 @@
     <string name="base_map_route_ready">已规划 %.1f km</string>
     <string name="base_map_route_failed">规划失败：%1$s</string>
     <string name="base_map_route_empty">规划返回空路线（是否 push 了 graph.bin？）</string>
+    <string name="replan_check">模拟 5 次偏航</string>
+    <string name="replan_result">重算 %1$d/5 次，最慢 %2$d ms，越界切换 %3$d 次（预算 3000 ms / 允许 1 次）\n%4$s</string>
+    <string name="replan_running">正在跑偏航重算…</string>
+    <string name="replan_need_route">路线还没算出来，稍等再试</string>
 </resources>

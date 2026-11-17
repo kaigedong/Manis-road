@@ -85,6 +85,18 @@ public final class MotuCore {
 
     private static native String nativeParseAmapPositions(String positions);
 
+    private static native String nativeDeviation(String pointsJson, double latitude,
+                                                 double longitude);
+
+    private static native String nativeReplanDecision(double deviationM, double improvement,
+                                                      double overlap, double msSinceSwitch,
+                                                      boolean hasCandidate);
+
+    private static native String nativeRouteOverlap(String aPointsJson, String bPointsJson);
+
+    private static native String nativeRouteFlicker(String referenceJson, String freshJson,
+                                                    double latitude, double longitude);
+
     private static native String nativeEndpoints();
 
     private static native String nativeConstants();
@@ -204,6 +216,33 @@ public final class MotuCore {
     }
 
     /** Load (and cache) the offline road graph, returning node/edge counts. */
+    /** 当前位置到折线的距离（米），用于判断偏航。 */
+    public static CoreResult deviation(JSONArray points, double latitude, double longitude) {
+        return CoreResult.parse(nativeDeviation(points.toString(), latitude, longitude));
+    }
+
+    /** 重算决策：偏航 50 m 立即重算，或更优解省 8% 且重合度 ≤0.7 且距上次切换 ≥15 s。 */
+    public static CoreResult replanDecision(double deviationM, double improvement, double overlap,
+                                            double msSinceSwitch, boolean hasCandidate) {
+        return CoreResult.parse(nativeReplanDecision(
+                deviationM, improvement, overlap, msSinceSwitch, hasCandidate));
+    }
+
+    /**
+     * 重算后的真实变化量：只和「原路线从最近点往后的那段」比，避免把已骑过的部分
+     * 也算成抖动。
+     */
+    public static CoreResult routeFlicker(JSONArray reference, JSONArray fresh,
+                                          double latitude, double longitude) {
+        return CoreResult.parse(nativeRouteFlicker(
+                reference.toString(), fresh.toString(), latitude, longitude));
+    }
+
+    /** 两条路线的重合度（0..1，50 m 容差）。 */
+    public static CoreResult routeOverlap(JSONArray a, JSONArray b) {
+        return CoreResult.parse(nativeRouteOverlap(a.toString(), b.toString()));
+    }
+
     public static CoreResult loadGraph(String graphPath) {
         return CoreResult.parse(nativeLoadGraph(graphPath));
     }

@@ -29,6 +29,8 @@ pub use osm::{OsmBuildReport, build_from_osm_json};
 pub use metrics::{ClassDistance, RouteMetrics, measure_edges};
 pub use parity::{Baseline, BaselineRoute, ParityReport, RouteComparison};
 pub use profile::{ClassWeights, RouteProfile, TurnPenalties};
-pub use replan::{Candidate, ReplanPolicy, ReplanReason, ReplanState, route_overlap};
+pub use replan::{
+    Candidate, ReplanPolicy, ReplanReason, ReplanState, evaluate_after, route_overlap,
+};
 pub use route::{RouteContext, RoutePlan, RouteStep, Snap};
 pub use traffic::{ClassFactors, PriorSource, TimeBucket, TrafficPrior};
