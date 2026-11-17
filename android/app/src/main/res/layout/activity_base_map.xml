@@ -1,44 +1,89 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!--
+  地图与控件分栏：MapView 用 SurfaceView 渲染，会盖住同一层级里的兄弟控件、
+  连点击都吞掉（点按钮地图反而平移）。所以按钮放在地图容器之外，
+  只有文字类浮层留在容器里。
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:orientation="vertical">
 
-    <org.maplibre.android.maps.MapView
-        android:id="@+id/base_map_view"
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="0dp"
+        android:layout_weight="1">
 
-    <Button
-        android:id="@+id/button_replan_check"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="top|end"
-        android:layout_margin="12dp"
-        android:elevation="8dp"
-        android:text="@string/replan_check" />
+        <org.maplibre.android.maps.MapView
+            android:id="@+id/base_map_view"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
 
-    <TextView
-        android:id="@+id/text_replan_result"
+        <TextView
+            android:id="@+id/text_replan_result"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|start"
+            android:layout_margin="8dp"
+            android:background="#CC000000"
+            android:padding="6dp"
+            android:elevation="8dp"
+            android:textColor="#FFFFFF"
+            android:textSize="11sp"
+            android:visibility="gone" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|start"
+            android:layout_margin="8dp"
+            android:background="#CC000000"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="6dp"
+            android:elevation="8dp"
+            android:text="@string/base_map_attribution"
+            android:textColor="#FFFFFF"
+            android:textSize="11sp" />
+    </FrameLayout>
+
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="top|start"
-        android:layout_margin="12dp"
-        android:background="#CC000000"
-        android:padding="8dp"
-        android:textColor="#FFFFFF"
-        android:elevation="8dp"
-        android:textSize="12sp"
-        android:visibility="gone" />
+        android:orientation="vertical"
+        android:padding="10dp"
+        android:background="#F7F5F0">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|start"
-        android:layout_margin="12dp"
-        android:background="#CC000000"
-        android:paddingHorizontal="10dp"
-        android:paddingVertical="6dp"
-        android:text="@string/base_map_attribution"
-        android:textColor="#FFFFFF"
-        android:textSize="11sp" />
-</FrameLayout>
+        <TextView
+            android:id="@+id/text_nav_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/nav_idle"
+            android:textColor="#1A1A1A"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/button_nav_start"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:minHeight="48dp"
+                android:text="@string/nav_start" />
+
+            <Button
+                android:id="@+id/button_replan_check"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:minHeight="48dp"
+                android:text="@string/replan_check" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

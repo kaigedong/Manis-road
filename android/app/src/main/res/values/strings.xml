@@ -127,4 +127,10 @@
     <string name="replan_running">正在跑偏航重算…</string>
     <string name="replan_need_route">路线还没算出来，稍等再试</string>
     <string name="camera_toast">电子眼：%1$s（%2$d m）</string>
+    <string name="nav_idle">尚未开始导航</string>
+    <string name="nav_start">开始导航</string>
+    <string name="nav_pause">暂停</string>
+    <string name="nav_running">剩余 %1$.2f km · 约 %2$d 分钟 · %3$d km/h</string>
+    <string name="nav_arrived">已到达终点（%1$.2f km）</string>
+    <string name="nav_need_route">路线还没算出来，稍等再试</string>
 </resources>

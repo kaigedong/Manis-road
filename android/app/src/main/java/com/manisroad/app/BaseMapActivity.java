@@ -61,6 +61,10 @@ public final class BaseMapActivity extends Activity {
             "cameras": {
               "type": "geojson",
               "data": { "type": "FeatureCollection", "features": [] }
+            },
+            "me": {
+              "type": "geojson",
+              "data": { "type": "FeatureCollection", "features": [] }
             }
           },
           "layers": [
@@ -120,6 +124,17 @@ public final class BaseMapActivity extends Activity {
               }
             },
             {
+              "id": "me",
+              "type": "circle",
+              "source": "me",
+              "paint": {
+                "circle-radius": 8,
+                "circle-color": "#1e88e5",
+                "circle-stroke-color": "#ffffff",
+                "circle-stroke-width": 3
+              }
+            },
+            {
               "id": "endpoints",
               "type": "circle",
               "source": "endpoints",
@@ -135,6 +150,19 @@ public final class BaseMapActivity extends Activity {
         """;
 
     private MapView mapView;
+    /** 导航态：沿路线模拟前进（真实 GPS 接入前先用固定速度推进）。 */
+    private org.maplibre.android.maps.MapLibreMap navMap;
+    private Style navStyle;
+    private final java.util.List<Point> navPoints = new java.util.ArrayList<>();
+    private final java.util.List<Double> navCumulative = new java.util.ArrayList<>();
+    private double navTravelled;
+    private boolean navigating;
+    private final android.os.Handler navHandler =
+            new android.os.Handler(android.os.Looper.getMainLooper());
+    /** 25 km/h，城区摩托车的常态速度。 */
+    private static final double NAV_SPEED_MPS = 25_000.0 / 3600.0;
+    private static final long NAV_TICK_MS = 500;
+
     /** 已加载的电子眼（原始 JSON），点击时找最近的一个。 */
     private final java.util.List<JSONObject> cameraPoints = new java.util.ArrayList<>();
     /** 自动跑一次重算检查，避免依赖点击（MapView 的 SurfaceView 会挡触摸）。 */
@@ -151,6 +179,7 @@ public final class BaseMapActivity extends Activity {
 
         mapView = findViewById(R.id.base_map_view);
         findViewById(R.id.button_replan_check).setOnClickListener(view -> runReplanCheck());
+        findViewById(R.id.button_nav_start).setOnClickListener(view -> toggleNavigation());
         mapView.onCreate(savedInstanceState);
         mapView.getMapAsync(map -> {
             map.getUiSettings().setCompassEnabled(true);
@@ -158,6 +187,8 @@ public final class BaseMapActivity extends Activity {
                     new org.maplibre.android.maps.Style.Builder().fromJson(STYLE_JSON),
                     style -> {
                         Log.i(TAG, "style loaded");
+                        navMap = map;
+                        navStyle = style;
                         drawCameras(map, style);
                         planAndDraw(map, style);
                     });
@@ -177,34 +208,11 @@ public final class BaseMapActivity extends Activity {
     }
 
     @Override
-    protected void onPause() {
-        super.onPause();
-        mapView.onPause();
-    }
-
-    @Override
-    protected void onStop() {
-        super.onStop();
-        mapView.onStop();
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        mapView.onDestroy();
-    }
-
-    @Override
     public void onLowMemory() {
         super.onLowMemory();
         mapView.onLowMemory();
     }
 
-    @Override
-    protected void onSaveInstanceState(Bundle outState) {
-        super.onSaveInstanceState(outState);
-        mapView.onSaveInstanceState(outState);
-    }
 
     /** 演示用的起终点：人民广场 → 陆家嘴（跨江）。 */
     private static final double ORIGIN_LAT = 31.2304;
@@ -510,5 +518,125 @@ public final class BaseMapActivity extends Activity {
             case 14 -> "灯光不当";
             default -> "其他";
         };
+    }
+
+    private void toggleNavigation() {
+        if (navigating) {
+            navigating = false;
+            navHandler.removeCallbacksAndMessages(null);
+            ((android.widget.Button) findViewById(R.id.button_nav_start))
+                    .setText(R.string.nav_start);
+            return;
+        }
+        if (currentRoutePoints == null || currentRoutePoints.length() < 2) {
+            Toast.makeText(this, R.string.nav_need_route, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        navPoints.clear();
+        navCumulative.clear();
+        for (int index = 0; index < currentRoutePoints.length(); index += 1) {
+            JSONObject point = currentRoutePoints.optJSONObject(index);
+            if (point == null) {
+                continue;
+            }
+            navPoints.add(Point.fromLngLat(point.optDouble("longitude"),
+                    point.optDouble("latitude")));
+        }
+        if (navPoints.size() < 2) {
+            return;
+        }
+        double total = 0.0;
+        navCumulative.add(0.0);
+        for (int index = 1; index < navPoints.size(); index += 1) {
+            total += distanceMeters(navPoints.get(index - 1).latitude(),
+                    navPoints.get(index - 1).longitude(),
+                    navPoints.get(index).latitude(), navPoints.get(index).longitude());
+            navCumulative.add(total);
+        }
+        navTravelled = 0.0;
+        navigating = true;
+        // 进入导航态后把调试面板收起来，屏幕留给地图。
+        findViewById(R.id.text_replan_result).setVisibility(android.view.View.GONE);
+        ((android.widget.Button) findViewById(R.id.button_nav_start))
+                .setText(R.string.nav_pause);
+        navHandler.removeCallbacksAndMessages(null);
+        navHandler.post(navTick);
+    }
+
+    private final Runnable navTick = this::stepNavigation;
+
+    /** 沿折线推进一步：更新蓝点、剩余里程与相机。 */
+    private void stepNavigation() {
+        if (!navigating || navPoints.size() < 2) {
+            return;
+        }
+        double total = navCumulative.get(navCumulative.size() - 1);
+        navTravelled = Math.min(total, navTravelled + NAV_SPEED_MPS * NAV_TICK_MS / 1000.0);
+
+        int segment = 1;
+        while (segment < navCumulative.size() - 1 && navCumulative.get(segment) < navTravelled) {
+            segment += 1;
+        }
+        double segmentStart = navCumulative.get(segment - 1);
+        double segmentLength = navCumulative.get(segment) - segmentStart;
+        double ratio = segmentLength <= 0.0 ? 0.0 : (navTravelled - segmentStart) / segmentLength;
+        Point from = navPoints.get(segment - 1);
+        Point to = navPoints.get(segment);
+        double lat = from.latitude() + (to.latitude() - from.latitude()) * ratio;
+        double lon = from.longitude() + (to.longitude() - from.longitude()) * ratio;
+
+        if (navStyle != null) {
+            com.google.gson.JsonObject props = new com.google.gson.JsonObject();
+            props.addProperty("kind", "me");
+            ((GeoJsonSource) navStyle.getSourceAs("me")).setGeoJson(FeatureCollection.fromFeature(
+                    Feature.fromGeometry(Point.fromLngLat(lon, lat), props)));
+        }
+        if (navMap != null) {
+            navMap.animateCamera(
+                    org.maplibre.android.camera.CameraUpdateFactory
+                            .newLatLngZoom(new LatLng(lat, lon), 16.0),
+                    300);
+        }
+
+        double remaining = total - navTravelled;
+        android.widget.TextView status = findViewById(R.id.text_nav_status);
+        if (remaining <= 5.0) {
+            navigating = false;
+            navHandler.removeCallbacksAndMessages(null);
+            ((android.widget.Button) findViewById(R.id.button_nav_start))
+                    .setText(R.string.nav_start);
+            status.setText(getString(R.string.nav_arrived, total / 1000.0));
+            return;
+        }
+        int minutes = (int) Math.round(remaining / NAV_SPEED_MPS / 60.0);
+        status.setText(getString(R.string.nav_running,
+                remaining / 1000.0, minutes, (int) Math.round(NAV_SPEED_MPS * 3.6)));
+        navHandler.postDelayed(navTick, NAV_TICK_MS);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        navHandler.removeCallbacksAndMessages(null);
+        mapView.onPause();
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        mapView.onStop();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        navHandler.removeCallbacksAndMessages(null);
+        mapView.onDestroy();
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        mapView.onSaveInstanceState(outState);
     }
 }
