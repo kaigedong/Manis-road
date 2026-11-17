@@ -114,8 +114,10 @@ node tools/map-preview/serve.mjs var/offline 8089
 - ⚠️ **像素级渲染未验证**：本机 headless Chrome 的 WebGL 走 SwiftShader，
   `Page.captureScreenshot` 只拍到背景色，canvas 回读也没有道路——
   用正常桌面浏览器打开预览页可自行确认
-- 🟡 Android 端已接入 MapLibre Native（`BaseMapActivity`），但用的是同源 GeoJSON
-  （`assets/roads.geojson`，10.5 MB），**不是** `tiles.pmtiles`：
-  MapLibre Android 的矢量源只接受 HTTP 模板或离线区包，没有内建 `pmtiles://`
-  协议。APK 构建通过（30 MB，含 `libmaplibre.so`），真机运行未验证（设备未授权）
+- ✅ **Android 真机渲染已验证**（Honor 设备，2026-11-17）：安装 APK 后从仪表盘进入
+  「离线底图」，MapLibre Native 用包内 `assets/roads.geojson` 画出上海路网，按道路
+  等级着色，划动可平移缩放，无报错。截图见 [`images/maplibre-android.png`](images/maplibre-android.png)
+- 🟡 但 App 内用的是**同源 GeoJSON**（10.5 MB），**不是** `tiles.pmtiles`：MapLibre
+  Android 的矢量源只接受 HTTP 模板或离线区包，没有内建 `pmtiles://` 协议。
+  PMTiles 在 Web 端由 JS 协议支持；Android 要接需要自建 tile provider
 - ⛔ 底图只有道路层：没有建筑、水系、地名标注（Overpass 只抓了 `highway`）

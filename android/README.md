@@ -64,6 +64,14 @@ node tools/map-preview/geojson-for-android.mjs \
 HTTP 模板或离线区包，没有内建 `pmtiles://` 协议；Web 端的 pmtiles 协议是 JS 实现。
 Android 接 PMTiles 需要一个 tile provider，尚未实现。
 
+### 已验证（2026-11-17，真机）
+
+- `assembleDebug` 通过，APK 30 MB（含 `libmaplibre.so` 13 MB、`libmotu_ffi.so` 9 MB、
+  `assets/roads.geojson` 10.5 MB）
+- 真机安装后从仪表盘进入「离线底图」，MapLibre 渲染出上海路网并按等级着色，
+  平移缩放正常，logcat 无 MapLibre 报错
+- 截图：[`docs/motu/images/maplibre-android.png`](../docs/motu/images/maplibre-android.png)
+
 ## 已验证
 
 在 `Manis_API_35`（arm64-v8a）模拟器上安装并运行：
