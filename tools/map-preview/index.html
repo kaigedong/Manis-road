@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Manis Road 离线底图预览</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<style>
+  html,body,#map{margin:0;height:100%}
+  .badge{position:absolute;left:12px;bottom:12px;z-index:2;background:#111c;color:#fff;
+         font:12px/1.6 -apple-system,sans-serif;padding:6px 10px;border-radius:6px}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="badge">© OpenStreetMap contributors (ODbL) · 数据来自 .mrdp 内的 tiles.pmtiles</div>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/pmtiles@3.2.1/dist/pmtiles.js"></script>
+<script>
+  // ?pmtiles=<url> 默认读同目录文件；pmtiles serve 提供 Range 支持。
+  const file = new URLSearchParams(location.search).get('pmtiles') || './roads-od.pmtiles';
+  const protocol = new pmtiles.Protocol();
+  maplibregl.addProtocol('pmtiles', protocol.tile);
+
+  const map = new maplibregl.Map({
+    container: 'map',
+    style: {
+      version: 8,
+      glyphs: 'https://unpkg.com/@fontsource/noto-sans@5.0.22/files/noto-sans-chinese-simplified-400-normal.woff',
+      sources: {
+        roads: { type: 'vector', url: `pmtiles://${new URL(file, location.href)}` }
+      },
+      layers: [
+        { id: 'bg', type: 'background', paint: { 'background-color': '#f2efe9' } },
+        { id: 'casing', type: 'line', source: 'roads', 'source-layer': 'roads',
+          paint: { 'line-color': '#ffffff', 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 1.5, 15, 7] } },
+        { id: 'roads', type: 'line', source: 'roads', 'source-layer': 'roads',
+          paint: {
+            'line-color': ['match', ['get', 'highway'],
+              'trunk', '#d94f2b', 'primary', '#e07b39', 'secondary', '#e8a33d',
+              'tertiary', '#f0c04a', '#5d8aa8'],
+            'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.8, 15, 4]
+          } }
+      ]
+    },
+    center: [121.4737, 31.2304],
+    zoom: 13,
+    attributionControl: { compact: true }
+  });
+  map.on('idle', () => { document.title = 'ready'; });
+</script>
+</body>
+</html>

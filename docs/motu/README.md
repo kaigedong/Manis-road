@@ -22,6 +22,7 @@ Rust 重写的取舍。分析产物位于 Git 忽略的 `var/motu/`。
 - [`gaps.md`](gaps.md)：原生 `requireSalt`、AMap/广告/推送等未重写部分与限制。
 - [`route-quality.md`](route-quality.md)：离线路由的成本模型、改造前后的实测质量对比与当前缺口。
 - [`offline-package.md`](offline-package.md)：`.mrdp` 离线数据包的格式、打包/校验流程与 App 侧读取方式。
+- [`offline-map-tiles.md`](offline-map-tiles.md)：离线底图瓦片流水线（OSM → GeoJSON → tippecanoe → PMTiles → .mrdp）。
 
 ## Rust 结构
 

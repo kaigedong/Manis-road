@@ -15,3 +15,4 @@ Rust workspace：
 现阶段**没有已审核可上图的点位**；历史导航讨论稿在 [`docs/`](docs/) 下，尚非正式 PRD。
 摩途重写的证据、协议与限制见 [`docs/motu/`](docs/motu/README.md)。
 离线模式、数据准备与离线路由见 [`docs/offline.md`](docs/offline.md)。
+离线底图瓦片流水线见 [`docs/motu/offline-map-tiles.md`](docs/motu/offline-map-tiles.md)。
