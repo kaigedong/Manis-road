@@ -306,24 +306,34 @@ impl RoadGraph {
     pub fn load(path: &Path) -> Result<Self> {
         let file = File::open(path)?;
         let mut reader = BufReader::new(file);
+        Self::read_from(&mut reader)
+    }
+
+    /// Load a graph from memory, e.g. straight out of an `.mrdp` package.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        let mut reader = BufReader::new(bytes);
+        Self::read_from(&mut reader)
+    }
+
+    fn read_from(reader: &mut impl Read) -> Result<Self> {
         let mut magic = [0_u8; 8];
         reader.read_exact(&mut magic)?;
         if &magic != MAGIC {
             return Err(RoutingError::InvalidGraph("bad magic".to_owned()));
         }
-        let version = read_u32(&mut reader)?;
+        let version = read_u32(reader)?;
         if !(VERSION_LEGACY..=VERSION).contains(&version) {
             return Err(RoutingError::InvalidGraph(format!(
                 "unsupported version {version}"
             )));
         }
 
-        let node_count = read_u32(&mut reader)? as usize;
+        let node_count = read_u32(reader)? as usize;
         let mut nodes = Vec::with_capacity(node_count);
         for _ in 0..node_count {
-            let id = read_i64(&mut reader)?;
-            let lat = read_f64(&mut reader)?;
-            let lon = read_f64(&mut reader)?;
+            let id = read_i64(reader)?;
+            let lat = read_f64(reader)?;
+            let lon = read_f64(reader)?;
             nodes.push(GraphNode { id, lat, lon });
         }
         let mut signals = Vec::new();
@@ -336,11 +346,11 @@ impl RoadGraph {
             }
         }
 
-        let way_count = read_u32(&mut reader)? as usize;
+        let way_count = read_u32(reader)? as usize;
         let mut ways = Vec::with_capacity(way_count);
         for _ in 0..way_count {
-            let name = read_string(&mut reader)?;
-            let highway = read_string(&mut reader)?;
+            let name = read_string(reader)?;
+            let highway = read_string(reader)?;
             let (lanes, surface) = if version >= VERSION_WAY_SURFACE {
                 let mut bytes = [0_u8; 2];
                 reader.read_exact(&mut bytes)?;
@@ -356,18 +366,18 @@ impl RoadGraph {
             });
         }
 
-        let edge_count = read_u32(&mut reader)? as usize;
+        let edge_count = read_u32(reader)? as usize;
         let mut offsets = Vec::with_capacity(node_count + 1);
         for _ in 0..=node_count {
-            offsets.push(read_u64(&mut reader)?);
+            offsets.push(read_u64(reader)?);
         }
         let mut edges = Vec::with_capacity(edge_count);
         for _ in 0..edge_count {
             edges.push(Edge {
-                to: read_u32(&mut reader)?,
-                distance_m: read_f32(&mut reader)?,
-                speed_kmh: read_u16(&mut reader)?,
-                way: read_u32(&mut reader)?,
+                to: read_u32(reader)?,
+                distance_m: read_f32(reader)?,
+                speed_kmh: read_u16(reader)?,
+                way: read_u32(reader)?,
             });
         }
         if offsets.len() != node_count + 1

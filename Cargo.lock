@@ -956,6 +956,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "manis-motu-pack"
+version = "0.1.0"
+dependencies = [
+ "manis-motu-core",
+ "manis-motu-routing",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "manis-motu-routing"
 version = "0.1.0"
 dependencies = [

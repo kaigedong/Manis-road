@@ -21,6 +21,7 @@ Rust 重写的取舍。分析产物位于 Git 忽略的 `var/motu/`。
 - [`camera.md`](camera.md)：电子眼类型、扫描/聚类/释放规则、车辆枚举、路线审计。
 - [`gaps.md`](gaps.md)：原生 `requireSalt`、AMap/广告/推送等未重写部分与限制。
 - [`route-quality.md`](route-quality.md)：离线路由的成本模型、改造前后的实测质量对比与当前缺口。
+- [`offline-package.md`](offline-package.md)：`.mrdp` 离线数据包的格式、打包/校验流程与 App 侧读取方式。
 
 ## Rust 结构
 
@@ -29,6 +30,8 @@ Rust 重写的取舍。分析产物位于 Git 忽略的 `var/motu/`。
 - [`crates/motu-routing`](../../crates/motu-routing/README.md)：离线 OSM 路网图与摩托
   车 A* 路由（等级权重 + 转向惩罚 + 质量指标）。
 - [`crates/motu-web`](../../crates/motu-web/README.md)：本机 Web 调试台，登录/同步/详情仍走 `motu-core`，Leaflet 只负责渲染和地图交互。
+- [`crates/motu-pack`](../../crates/motu-pack/README.md)：离线数据包 `.mrdp`
+  的读写与命令行工具。
 - [`android/`](../../android/README.md)：Java 界面与构建脚本。
 
 ## 数据与合规

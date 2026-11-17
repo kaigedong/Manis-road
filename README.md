@@ -8,6 +8,7 @@ Rust workspace：
 - [`crates/motu-core`](crates/motu-core/README.md)：摩途 4.1.9 的业务核心重写（接口目录、签名/加密、登录、电子眼扫描、官方点位与详情、车辆、路线审计、本地状态）。
 - [`crates/motu-ffi`](crates/motu-ffi/README.md)：`motu-core` 的 JNI JSON 桥。
 - [`crates/motu-routing`](crates/motu-routing/src/lib.rs)：离线 OSM 路网图与 A* 摩托车路由，构建一次后运行时零网络。
+- [`crates/motu-pack`](crates/motu-pack/README.md)：离线数据包 `.mrdp` 的读写与 CLI，把图、先验、禁区、电子眼打成单一可分发文件。
 - [`crates/motu-web`](crates/motu-web/README.md)：本机 Web 调试台；Leaflet 展示上海电子眼，登录/同步/详情全部经由 `motu-core`，点位/详情/图片缓存在本机 SQLite（git-ignored）；支持 `MOTU_WEB_OFFLINE=1` 零网络运行与本地路线规划。
 - [`android/`](android/README.md)：仅含 Java 界面与构建脚本的 Android 工程，业务逻辑全部在 Rust；地图页支持离线路线（JNI `nativeRoute`）与 GPS 巡航。
 

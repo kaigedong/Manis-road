@@ -4,6 +4,7 @@ members = [
     "crates/camera-cli",
     "crates/camera-web",
     "crates/motu-core",
+    "crates/motu-pack",
     "crates/motu-ffi",
     "crates/motu-routing",
     "crates/motu-web",
