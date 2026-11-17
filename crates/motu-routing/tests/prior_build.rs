@@ -129,7 +129,7 @@ fn too_few_samples_leave_the_bucket_at_one() {
         built.prior.buckets[0].factors.residential, 1.0,
         "an under-sampled cell must not invent a factor"
     );
-    assert!(built.report.skipped_cells.len() > 0);
+    assert_ne!(built.report.skipped_cells.len(), 0, "under-sampled cells are listed");
 }
 
 #[test]
