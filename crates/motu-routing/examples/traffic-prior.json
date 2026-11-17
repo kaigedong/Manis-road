@@ -1,0 +1,14 @@
+{
+  "source": "assumption",
+  "generatedAt": null,
+  "buckets": [
+    { "label": "早高峰", "startHour": 7, "endHour": 10,
+      "factors": { "trunk": 2.1, "primary": 1.9, "secondary": 1.5, "tertiary": 1.15, "residential": 1.05, "other": 1.1 } },
+    { "label": "平峰", "startHour": 10, "endHour": 17,
+      "factors": { "trunk": 1.2, "primary": 1.15, "secondary": 1.05, "tertiary": 1.0, "residential": 1.0, "other": 1.0 } },
+    { "label": "晚高峰", "startHour": 17, "endHour": 20,
+      "factors": { "trunk": 2.2, "primary": 2.0, "secondary": 1.6, "tertiary": 1.2, "residential": 1.05, "other": 1.1 } },
+    { "label": "夜间", "startHour": 20, "endHour": 7,
+      "factors": { "trunk": 1.0, "primary": 1.0, "secondary": 1.0, "tertiary": 1.0, "residential": 1.0, "other": 1.0 } }
+  ]
+}

@@ -10,6 +10,7 @@ use crate::error::{Result, RoutingError};
 use crate::graph::{RoadGraph, haversine_m};
 use crate::metrics::{RouteMetrics, measure_edges};
 use crate::profile::RouteProfile;
+use crate::traffic::TrafficPrior;
 
 /// How far a coordinate may be from the graph and still snap to it.
 const MAX_SNAP_M: f64 = 600.0;
@@ -48,6 +49,18 @@ pub struct RoutePlan {
     pub distance_m: f64,
     pub duration_s: f64,
     pub steps: Vec<RouteStep>,
+}
+
+/// Everything about *when* and *under which preferences* a route is planned.
+///
+/// Kept separate from [`RouteProfile`] because the profile is static (how much
+/// this rider dislikes arterials) while this is situational (is it rush hour).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RouteContext<'a> {
+    /// Time-of-day multipliers; `None` means no time dependence.
+    pub prior: Option<&'a TrafficPrior>,
+    /// Local hour, 0..=23. Only read when `prior` is set.
+    pub hour: u8,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -137,6 +150,28 @@ impl RoadGraph {
         profile: &RouteProfile,
         deterrent: Option<&CameraDeterrent>,
     ) -> Result<(RoutePlan, RouteMetrics)> {
+        self.route_report_with_context(
+            origin,
+            destination,
+            profile,
+            deterrent,
+            &RouteContext::default(),
+        )
+    }
+
+    /// Plan and measure with a time-of-day prior.
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "edge indexes fit the address space"
+    )]
+    pub fn route_report_with_context(
+        &self,
+        origin: LatLng,
+        destination: LatLng,
+        profile: &RouteProfile,
+        deterrent: Option<&CameraDeterrent>,
+        context: &RouteContext<'_>,
+    ) -> Result<(RoutePlan, RouteMetrics)> {
         if !origin.is_valid() || !destination.is_valid() {
             return Err(RoutingError::InvalidCoordinate);
         }
@@ -149,7 +184,7 @@ impl RoadGraph {
         let route_edges = if start.node == goal.node {
             Vec::new()
         } else {
-            self.search_edges(start.node, goal.node, profile, deterrent)?
+            self.search_edges(start.node, goal.node, profile, deterrent, context)?
         };
 
         let mut points: Vec<LatLng> = Vec::with_capacity(route_edges.len() + 1);
@@ -226,6 +261,7 @@ impl RoadGraph {
         goal_node: u32,
         profile: &RouteProfile,
         deterrent: Option<&CameraDeterrent>,
+        context: &RouteContext<'_>,
     ) -> Result<Vec<u64>> {
         let edge_count = self.edges.len();
         let max_speed = self
@@ -247,7 +283,10 @@ impl RoadGraph {
                     .ways
                     .get(edge.way as usize)
                     .map_or("", |way| way.highway.as_str());
-                base_cost[index] = edge.duration_s() * profile.class_weight(highway);
+                let traffic = context
+                    .prior
+                    .map_or(1.0, |prior| prior.factor(context.hour, highway));
+                base_cost[index] = edge.duration_s() * profile.class_weight(highway) * traffic;
                 bearing_deg[index] = bearing(from, self.nodes[edge.to as usize].position()) as f32;
             }
         }

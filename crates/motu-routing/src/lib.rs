@@ -17,7 +17,9 @@ pub mod graph;
 pub mod metrics;
 pub mod osm;
 pub mod profile;
+pub mod replan;
 pub mod route;
+pub mod traffic;
 
 pub use error::{Result, RoutingError};
 pub use avoid::{CameraDeterrent, cameras_within};
@@ -25,4 +27,6 @@ pub use graph::{GraphNode, RoadGraph, WayInfo};
 pub use osm::{OsmBuildReport, build_from_osm_json};
 pub use metrics::{ClassDistance, RouteMetrics, measure_edges};
 pub use profile::{ClassWeights, RouteProfile, TurnPenalties};
-pub use route::{RoutePlan, RouteStep, Snap};
+pub use replan::{Candidate, ReplanPolicy, ReplanReason, ReplanState, route_overlap};
+pub use route::{RouteContext, RoutePlan, RouteStep, Snap};
+pub use traffic::{ClassFactors, PriorSource, TimeBucket, TrafficPrior};

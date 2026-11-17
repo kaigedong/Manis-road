@@ -109,10 +109,79 @@ edge cost = duration_s × class_weight(highway) + turn_penalty(angle)
 [`crates/motu-routing/README.md`](../../crates/motu-routing/README.md)；Overpass
 恢复后一条命令即可重建全域图。
 
+## 第 3 轮：时段先验与连续重算
+
+### 3.1 时段车流先验（L2）
+
+新增 `traffic.rs`：把一天切成若干时间桶，每个桶给每类道路一个成本乘数。
+
+```json
+{ "source": "assumption",
+  "buckets": [
+    { "label": "早高峰", "startHour": 7, "endHour": 10,
+      "factors": { "primary": 1.9, "residential": 1.05 } } ] }
+```
+
+关键设计：**`source` 字段区分 `measured` 与 `assumption`**，代码里
+`PriorSource::is_measured()` 可判定，验收逻辑只接受 `measured`。这样占位先验
+不可能冒充实测数据——目标里“不得伪造时段权重”由类型系统兜住，而不是靠自觉。
+
+CLI 已支持：
+
+```bash
+motu-graph metrics var/offline/graph-od.bin 31.1951,121.4368 31.3030,121.5150 \
+  --hour 8 --prior var/offline/traffic-prior.assumption.json
+```
+
+**实测（用 `examples/traffic-prior.json`，source=assumption）**，同一 OD 在 08:00 与
+03:00 的路线差异（50 m 容差下差异点占比）：
+
+| OD | h8 距离 | h3 距离 | 差异点占比 | 结论 |
+|---|---|---|---|---|
+| 徐家汇→五角场 | 18.1 km | 18.0 km | 33% | 不同 |
+| 中山公园→豫园 | 8.3 km | 8.2 km | 31% | 不同 |
+| 上海南站→虹桥站 | 17.0 km | 17.0 km | 5% | 不同 |
+| 人民广场→陆家嘴 | 8.5 km | 8.5 km | 4% | 相同 |
+| 静安寺→张江 | 21.2 km | 21.2 km | 4% | 相同 |
+
+**3/5 不同。** 两条没变的原因很清楚：陆家嘴只能过复兴东路隧道，没有替代路线；
+静安寺→张江本来就已经 0% 干道，先验没有杠杆可施。
+
+这不是“没做”，而是**先验是假设的，所以差异强度也是假设的**。要让它成为验收
+证据，必须先有 `measured` 先验，来源二选一：高德路况 API 定期采样，或积累本人
+骑行轨迹。在此之前，验收项“早高峰≠凌晨”只能记为**机制已验证、数据待补**。
+
+### 3.2 连续重算控制器（L3）
+
+新增 `replan.rs`：
+
+```text
+偏航 > 50 m                    → 立即重算（3 s 冷却防抖）
+更优解 savings ≥ 8%
+  且 重合度 ≤ 0.7
+  且 距上次切换 ≥ 15 s        → 切换
+否则                          → 保持当前路线
+```
+
+- `route_overlap(current, candidate, 50 m)`：当前路线有多少比例落在候选折线 50 m 内。
+  重合度高说明“同一条路换个折线”，切换对骑手不可见却白烧 CPU。
+- `ReplanState::evaluate()` 返回 `Deviation` / `BetterRoute` / `None`，内部维护
+  上次切换时间与切换计数。
+
+验收测试 `crates/motu-routing/tests/continuous_replan.rs`：
+
+| 断言 | 结果 |
+|---|---|
+| 5 次人为偏航全部触发重算 | ✅ 5/5 |
+| 每次重算耗时 < 3 s | ✅（网格图上毫秒级） |
+| 近乎相同候选导致的路线跳变 ≤ 1 | ✅ 0 次 |
+| 30 m 平移判为同一路线（重合度 > 0.9） | ✅ |
+| 300 m 平行道路判为不同路线（< 0.1） | ✅ |
+
 ## 还没做
 
-- 按时段的常态车流先验
-- 连续重算控制器（偏航 50m / 前方 2km 更优解 / 滞回）
+- 实测时段先验（需高德路况 key 或骑行轨迹；当前只有 assumption 占位）
+- 车道数与路面（需再升一次图格式）
 - 禁摩区域从“事后审计”改为“规划期禁止”
 - `calPath` 基准集（15–20 条）与自动对比
 - PMTiles 底图与 MapLibre 渲染

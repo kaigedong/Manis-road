@@ -72,6 +72,22 @@ cargo test -p manis-motu-routing
 
 `tests/route_quality.rs` 锁定两个行为：小程序绕行优先于干道捷径、同等代价下不绕路口。
 
+## 时段先验
+
+`traffic.rs` 按时间桶给每类道路乘一个成本系数，`source` 字段区分
+`measured` / `assumption`——占位先验不能冒充实测数据。
+
+```bash
+motu-graph metrics var/offline/graph-od.bin 31.1951,121.4368 31.3030,121.5150 \
+  --hour 8 --prior crates/motu-routing/examples/traffic-prior.json
+```
+
+## 连续重算
+
+`replan.rs` 只做“要不要重算”的决策：偏航 > 50 m 立即重算（3 s 冷却），或候选路线
+省 ≥ 8% 且重合度 ≤ 0.7 且距上次切换 ≥ 15 s。`route_overlap()` 用来判断候选是否
+只是“同一条路的另一种折线”。
+
 ## 图格式
 
 `MOTUGRPH` magic，当前 **v2**：

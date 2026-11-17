@@ -10,7 +10,7 @@
 use std::{path::Path, process::ExitCode};
 
 use motu_core::LatLng;
-use motu_routing::{RoadGraph, RouteProfile, build_from_osm_json};
+use motu_routing::{RoadGraph, RouteContext, RouteProfile, TrafficPrior, build_from_osm_json};
 
 fn main() -> ExitCode {
     match run() {
@@ -22,6 +22,10 @@ fn main() -> ExitCode {
     }
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "one flat match over CLI subcommands"
+)]
 fn run() -> Result<(), String> {
     let mut args = std::env::args().skip(1);
     let command = args.next().ok_or_else(usage)?;
@@ -68,9 +72,35 @@ fn run() -> Result<(), String> {
             let input = args.next().ok_or_else(usage)?;
             let origin = parse_point(&args.next().ok_or_else(usage)?)?;
             let destination = parse_point(&args.next().ok_or_else(usage)?)?;
+            let mut hour: Option<u8> = None;
+            let mut prior_path: Option<String> = None;
+            while let Some(flag) = args.next() {
+                match flag.as_str() {
+                    "--hour" => hour = Some(parse_hour(args.next())?),
+                    "--prior" => prior_path = args.next(),
+                    other => return Err(format!("unknown flag {other}")),
+                }
+            }
+            let prior = match prior_path.as_deref() {
+                Some(path) => Some(
+                    TrafficPrior::load(Path::new(path)).map_err(|error| error.to_string())?,
+                ),
+                None => None,
+            };
+            let context = RouteContext {
+                prior: prior.as_ref(),
+                hour: hour.unwrap_or(12),
+            };
             let graph = RoadGraph::load(Path::new(&input)).map_err(|error| error.to_string())?;
             let plan = graph
-                .route(origin, destination)
+                .route_report_with_context(
+                    origin,
+                    destination,
+                    &RouteProfile::motorcycle_default(),
+                    None,
+                    &context,
+                )
+                .map(|(plan, _)| plan)
                 .map_err(|error| error.to_string())?;
             let json = serde_json::to_string_pretty(&plan).map_err(|error| error.to_string())?;
             println!("{json}");
@@ -80,6 +110,8 @@ fn run() -> Result<(), String> {
             let origin = parse_point(&args.next().ok_or_else(usage)?)?;
             let destination = parse_point(&args.next().ok_or_else(usage)?)?;
             let mut force_neutral = false;
+            let mut hour: Option<u8> = None;
+            let mut prior_path: Option<String> = None;
             let mut profile = RouteProfile::motorcycle_default();
             while let Some(flag) = args.next() {
                 match flag.as_str() {
@@ -89,6 +121,8 @@ fn run() -> Result<(), String> {
                     "--secondary" => profile.classes.secondary = parse_weight(args.next())?,
                     "--tertiary" => profile.classes.tertiary = parse_weight(args.next())?,
                     "--residential" => profile.classes.residential = parse_weight(args.next())?,
+                    "--hour" => hour = Some(parse_hour(args.next())?),
+                    "--prior" => prior_path = args.next(),
                     other => return Err(format!("unknown flag {other}")),
                 }
             }
@@ -96,9 +130,19 @@ fn run() -> Result<(), String> {
                 profile = neutral_profile();
             }
             let neutral = profile.classes.primary <= 1.0 && profile.classes.secondary <= 1.0;
+            let prior = match prior_path.as_deref() {
+                Some(path) => Some(
+                    TrafficPrior::load(Path::new(path)).map_err(|error| error.to_string())?,
+                ),
+                None => None,
+            };
+            let context = RouteContext {
+                prior: prior.as_ref(),
+                hour: hour.unwrap_or(12),
+            };
             let graph = RoadGraph::load(Path::new(&input)).map_err(|error| error.to_string())?;
             let (plan, metrics) = graph
-                .route_report(origin, destination, &profile, None)
+                .route_report_with_context(origin, destination, &profile, None, &context)
                 .map_err(|error| error.to_string())?;
             let report = serde_json::json!({
                 "origin": { "lat": origin.latitude, "lon": origin.longitude },
@@ -108,6 +152,8 @@ fn run() -> Result<(), String> {
                 "points": plan.points.len(),
                 "steps": plan.steps.len(),
                 "profile": if neutral { "plain" } else { "motorcycle" },
+                "hour": context.hour,
+                "priorSource": prior.as_ref().map(|prior| format!("{:?}", prior.source)),
                 "metrics": metrics,
             });
             let json = serde_json::to_string_pretty(&report).map_err(|error| error.to_string())?;
@@ -141,6 +187,15 @@ fn neutral_profile() -> RouteProfile {
         },
         signal_penalty_s: 0.0,
     }
+}
+
+fn parse_hour(value: Option<String>) -> Result<u8, String> {
+    let raw = value.ok_or_else(|| "missing hour".to_owned())?;
+    let hour: u8 = raw.parse().map_err(|error| format!("bad hour {raw}: {error}"))?;
+    if hour > 23 {
+        return Err(format!("hour must be 0..=23, got {hour}"));
+    }
+    Ok(hour)
 }
 
 fn parse_weight(value: Option<String>) -> Result<f64, String> {
