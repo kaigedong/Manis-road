@@ -109,7 +109,8 @@ node tools/map-preview/serve.mjs var/offline 8089
 ## 未完成 / 已验证到什么程度
 
 - ✅ 流水线与数据：PMTiles v3 容器、793 块瓦片、图层与属性、进 `.mrdp` 并校验通过
-- ✅ MapLibre 能加载该源（headless 里 `sourcedata` 事件正常触发，无报错）
+- ✅ MapLibre 能加载该源：服务端日志确认它按 Range 取到了瓦片数据
+  （`GET /roads-od.pmtiles bytes=2452842-2506416`），`sourcedata` 事件正常、无报错
 - ⚠️ **像素级渲染未验证**：本机 headless Chrome 的 WebGL 走 SwiftShader，
   `Page.captureScreenshot` 只拍到背景色，canvas 回读也没有道路——
   用正常桌面浏览器打开预览页可自行确认

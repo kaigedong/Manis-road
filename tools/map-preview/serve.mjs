@@ -23,6 +23,7 @@ const TYPES = {
 
 createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
+  if (process.env.LOG_REQUESTS) console.log(req.method, url.pathname, req.headers.range ?? '-');
   const path = join(dir, normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[/\\])+/, ''));
   let stat;
   try {
