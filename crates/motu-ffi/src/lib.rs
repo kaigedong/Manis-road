@@ -1139,6 +1139,42 @@ pub extern "system" fn Java_com_manisroad_app_core_MotuCore_nativeRouteFlicker(
     jstring_out(&mut env, result.unwrap_or_else(err))
 }
 
+/// `nativeTile(pmtilesPath, z, x, y)`: raw (gzip) tile bytes, or `null` when the
+/// archive has no such tile. The Java side serves these over loopback so
+/// `MapLibre` can consume them as a normal vector source.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_manisroad_app_core_MotuCore_nativeTile<'local>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    path: JString<'local>,
+    zoom: jint,
+    x: jint,
+    y: jint,
+) -> jni::sys::jbyteArray {
+    let result: Result<Option<Vec<u8>>, String> = (|| {
+        let path = string_arg(&mut env, &path)?;
+        let zoom = u8::try_from(zoom).map_err(|_| format!("bad zoom {zoom}"))?;
+        let x = u32::try_from(x).map_err(|_| format!("bad x {x}"))?;
+        let y = u32::try_from(y).map_err(|_| format!("bad y {y}"))?;
+        with_state(|state| {
+            let tiles = tiles_for(state, &path)?;
+            let tile = tiles.tile(zoom, x, y).map_err(|error| error.to_string())?;
+            Ok(tile.map(<[u8]>::to_vec))
+        })
+    })();
+    match result {
+        Ok(Some(bytes)) => match env.byte_array_from_slice(&bytes) {
+            Ok(array) => array.into_raw(),
+            Err(_) => std::ptr::null_mut(),
+        },
+        Ok(None) => std::ptr::null_mut(),
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            std::ptr::null_mut()
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use motu_routing::{GraphNode, RoadGraph};
@@ -1220,41 +1256,5 @@ mod tests {
     #[test]
     fn timestamps_are_positive() {
         assert!(now_ms() > 0);
-    }
-}
-
-/// `nativeTile(pmtilesPath, z, x, y)`: raw (gzip) tile bytes, or `null` when the
-/// archive has no such tile. The Java side serves these over loopback so
-/// MapLibre can consume them as a normal vector source.
-#[unsafe(no_mangle)]
-pub extern "system" fn Java_com_manisroad_app_core_MotuCore_nativeTile<'local>(
-    mut env: JNIEnv<'local>,
-    _class: JClass<'local>,
-    path: JString<'local>,
-    zoom: jint,
-    x: jint,
-    y: jint,
-) -> jni::sys::jbyteArray {
-    let result: Result<Option<Vec<u8>>, String> = (|| {
-        let path = string_arg(&mut env, &path)?;
-        let zoom = u8::try_from(zoom).map_err(|_| format!("bad zoom {zoom}"))?;
-        let x = u32::try_from(x).map_err(|_| format!("bad x {x}"))?;
-        let y = u32::try_from(y).map_err(|_| format!("bad y {y}"))?;
-        with_state(|state| {
-            let tiles = tiles_for(state, &path)?;
-            let tile = tiles.tile(zoom, x, y).map_err(|error| error.to_string())?;
-            Ok(tile.map(<[u8]>::to_vec))
-        })
-    })();
-    match result {
-        Ok(Some(bytes)) => match env.byte_array_from_slice(&bytes) {
-            Ok(array) => array.into_raw(),
-            Err(_) => std::ptr::null_mut(),
-        },
-        Ok(None) => std::ptr::null_mut(),
-        Err(error) => {
-            let _ = env.throw_new("java/lang/IllegalStateException", error);
-            std::ptr::null_mut()
-        }
     }
 }
