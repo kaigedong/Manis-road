@@ -11,14 +11,18 @@
 // Fallible APIs document their errors in the error enum.
 #![allow(clippy::missing_errors_doc)]
 
-pub mod error;
 pub mod avoid;
+pub mod error;
 pub mod graph;
+pub mod metrics;
 pub mod osm;
+pub mod profile;
 pub mod route;
 
 pub use error::{Result, RoutingError};
 pub use avoid::{CameraDeterrent, cameras_within};
 pub use graph::{GraphNode, RoadGraph, WayInfo};
 pub use osm::{OsmBuildReport, build_from_osm_json};
+pub use metrics::{ClassDistance, RouteMetrics, measure_edges};
+pub use profile::{ClassWeights, RouteProfile, TurnPenalties};
 pub use route::{RoutePlan, RouteStep, Snap};

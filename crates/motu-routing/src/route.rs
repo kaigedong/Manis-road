@@ -8,11 +8,11 @@ use serde::{Deserialize, Serialize};
 use crate::avoid::CameraDeterrent;
 use crate::error::{Result, RoutingError};
 use crate::graph::{RoadGraph, haversine_m};
+use crate::metrics::{RouteMetrics, measure_edges};
+use crate::profile::RouteProfile;
 
 /// How far a coordinate may be from the graph and still snap to it.
 const MAX_SNAP_M: f64 = 600.0;
-/// Upper bound used by the A* heuristic; the fastest road is below this.
-const HEURISTIC_SPEED_KMH: f64 = 80.0;
 
 /// Result of snapping a coordinate to the nearest graph node.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -53,12 +53,16 @@ pub struct RoutePlan {
 #[derive(Debug, Clone, Copy)]
 struct QueueItem {
     estimate: f64,
-    node: u32,
+    /// Recorded cost to reach `index`, used to discard stale queue entries.
+    cost: f64,
+    /// Edge index, not node index: the search runs over directed edges so that
+    /// junction cost can depend on how the rider arrived.
+    index: u32,
 }
 
 impl PartialEq for QueueItem {
     fn eq(&self, other: &Self) -> bool {
-        self.estimate == other.estimate && self.node == other.node
+        self.estimate == other.estimate && self.index == other.index
     }
 }
 
@@ -70,7 +74,7 @@ impl Ord for QueueItem {
         other
             .estimate
             .total_cmp(&self.estimate)
-            .then_with(|| other.node.cmp(&self.node))
+            .then_with(|| other.index.cmp(&self.index))
     }
 }
 
@@ -89,25 +93,50 @@ impl RoadGraph {
     }
 
     /// Plan a motorcycle route between two WGS-84 coordinates.
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "edge indexes fit the address space"
-    )]
     pub fn route(&self, origin: LatLng, destination: LatLng) -> Result<RoutePlan> {
         self.route_with(origin, destination, None)
     }
 
     /// Like [`RoadGraph::route`], but optionally penalises nodes near cameras.
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "edge indexes fit the address space"
-    )]
     pub fn route_with(
         &self,
         origin: LatLng,
         destination: LatLng,
         deterrent: Option<&CameraDeterrent>,
     ) -> Result<RoutePlan> {
+        self.route_report(
+            origin,
+            destination,
+            &RouteProfile::motorcycle_default(),
+            deterrent,
+        )
+        .map(|(plan, _)| plan)
+    }
+
+    /// Plan with an explicit cost profile.
+    pub fn route_with_profile(
+        &self,
+        origin: LatLng,
+        destination: LatLng,
+        profile: &RouteProfile,
+        deterrent: Option<&CameraDeterrent>,
+    ) -> Result<RoutePlan> {
+        self.route_report(origin, destination, profile, deterrent)
+            .map(|(plan, _)| plan)
+    }
+
+    /// Plan a route and measure its road-class composition in the same pass.
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "edge indexes fit the address space"
+    )]
+    pub fn route_report(
+        &self,
+        origin: LatLng,
+        destination: LatLng,
+        profile: &RouteProfile,
+        deterrent: Option<&CameraDeterrent>,
+    ) -> Result<(RoutePlan, RouteMetrics)> {
         if !origin.is_valid() || !destination.is_valid() {
             return Err(RoutingError::InvalidCoordinate);
         }
@@ -117,80 +146,23 @@ impl RoadGraph {
         let start = self.snap(origin).ok_or(RoutingError::SnapFailed)?;
         let goal = self.snap(destination).ok_or(RoutingError::SnapFailed)?;
 
-        let destination_node = &self.nodes[goal.node as usize];
-        let destination_point = destination_node.position();
-        let start_node = &self.nodes[start.node as usize];
+        let route_edges = if start.node == goal.node {
+            Vec::new()
+        } else {
+            self.search_edges(start.node, goal.node, profile, deterrent)?
+        };
 
-        let mut best = vec![f64::INFINITY; self.nodes.len()];
-        let mut came: Vec<Option<(u32, u64)>> = vec![None; self.nodes.len()];
-        let mut heap = BinaryHeap::new();
-        best[start.node as usize] = 0.0;
-        heap.push(QueueItem {
-            estimate: heuristic(start_node.position(), destination_point),
-            node: start.node,
-        });
-
-        while let Some(item) = heap.pop() {
-            if item.node == goal.node {
-                break;
-            }
-            let current = item.node as usize;
-            if !item.estimate.is_finite() {
-                continue;
-            }
-            let base = best[current];
-            let offset = self.offsets[current];
-            for (index, edge) in self.neighbors(item.node).iter().enumerate() {
-                let next = edge.to as usize;
-                let global_edge = offset as usize + index;
-                if deterrent.is_some_and(|d| d.blocks_edge(global_edge)) {
-                    continue;
-                }
-                let camera_penalty = deterrent.map_or(0.0, |d| f64::from(d.penalty(edge.to)));
-                if camera_penalty.is_infinite() {
-                    // Hard avoidance: never enter a camera zone.
-                    continue;
-                }
-                let candidate = base + edge.duration_s() * (1.0 + camera_penalty);
-                if candidate + 1e-9 >= best[next] {
-                    continue;
-                }
-                best[next] = candidate;
-                came[next] = Some((item.node, offset + index as u64));
-                let estimate =
-                    candidate + heuristic(self.nodes[next].position(), destination_point);
-                heap.push(QueueItem {
-                    estimate,
-                    node: edge.to,
-                });
-            }
+        let mut points: Vec<LatLng> = Vec::with_capacity(route_edges.len() + 1);
+        points.push(self.nodes[start.node as usize].position());
+        for &index in &route_edges {
+            points.push(self.nodes[self.edges[index as usize].to as usize].position());
         }
 
-        if !best[goal.node as usize].is_finite() {
-            return Err(RoutingError::NoPath);
-        }
-
-        // Walk backwards, collecting nodes and the edges between them.
-        let mut nodes_reversed = vec![goal.node];
-        let mut edges_reversed = Vec::new();
-        let mut cursor = goal.node;
-        while let Some((previous, edge_index)) = came[cursor as usize] {
-            edges_reversed.push(edge_index);
-            nodes_reversed.push(previous);
-            cursor = previous;
-        }
-        nodes_reversed.reverse();
-        edges_reversed.reverse();
-
-        let mut points: Vec<LatLng> = nodes_reversed
-            .iter()
-            .map(|node| self.nodes[*node as usize].position())
-            .collect();
-        let mut distance_m = edges_reversed
+        let mut distance_m = route_edges
             .iter()
             .map(|index| f64::from(self.edges[*index as usize].distance_m))
             .sum::<f64>();
-        let mut duration_s = edges_reversed
+        let mut duration_s = route_edges
             .iter()
             .map(|index| self.edges[*index as usize].duration_s())
             .sum::<f64>();
@@ -206,17 +178,169 @@ impl RoadGraph {
             duration_s += goal.distance_m / (25.0 / 3.6);
             points.push(destination);
         }
+        if points.len() == 1 {
+            points.push(destination);
+        }
 
         let point_offset = u32::from(start.distance_m > 1.0);
-        let steps = build_steps(self, &edges_reversed, start.node, distance_m, point_offset);
+        let mut steps = build_steps(self, &route_edges, start.node, distance_m, point_offset);
+        if steps.is_empty() {
+            steps.push(RouteStep {
+                direction: "arrive".to_owned(),
+                instruction: "到达终点".to_owned(),
+                road: String::new(),
+                distance_m: 0.0,
+                start_index: point_offset,
+                end_index: point_offset,
+            });
+        }
 
-        Ok(RoutePlan {
-            points,
-            distance_m,
-            duration_s,
-            steps,
-        })
+        let mut metrics = measure_edges(self, &route_edges);
+        metrics.distance_m = distance_m;
+        metrics.duration_s = duration_s;
+
+        Ok((
+            RoutePlan {
+                points,
+                distance_m,
+                duration_s,
+                steps,
+            },
+            metrics,
+        ))
     }
+
+    /// A* over directed edges.
+    ///
+    /// Edges, not nodes, are the search states: the cost of leaving a junction
+    /// depends on the road the rider arrived on (turn penalty), which a
+    /// node-only search cannot express.
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::too_many_lines,
+        reason = "one linear pass over the adjacency plus the A* loop"
+    )]
+    fn search_edges(
+        &self,
+        start_node: u32,
+        goal_node: u32,
+        profile: &RouteProfile,
+        deterrent: Option<&CameraDeterrent>,
+    ) -> Result<Vec<u64>> {
+        let edge_count = self.edges.len();
+        let max_speed = self
+            .edges
+            .iter()
+            .map(|edge| edge.speed_kmh)
+            .max()
+            .unwrap_or(80)
+            .max(80);
+        let destination_point = self.nodes[goal_node as usize].position();
+
+        let mut base_cost = vec![0_f64; edge_count];
+        let mut bearing_deg = vec![0_f32; edge_count];
+        for node in 0..self.nodes.len() {
+            let from = self.nodes[node].position();
+            for index in self.offsets[node] as usize..self.offsets[node + 1] as usize {
+                let edge = self.edges[index];
+                let highway = self
+                    .ways
+                    .get(edge.way as usize)
+                    .map_or("", |way| way.highway.as_str());
+                base_cost[index] = edge.duration_s() * profile.class_weight(highway);
+                bearing_deg[index] = bearing(from, self.nodes[edge.to as usize].position()) as f32;
+            }
+        }
+
+        let mut best = vec![f64::INFINITY; edge_count];
+        let mut came = vec![u32::MAX; edge_count];
+        let mut heap = BinaryHeap::new();
+
+        for index in self.offsets[start_node as usize] as usize
+            ..self.offsets[start_node as usize + 1] as usize
+        {
+            let edge = self.edges[index];
+            if deterrent.is_some_and(|d| d.blocks_edge(index)) {
+                continue;
+            }
+            let camera = deterrent.map_or(0.0, |d| f64::from(d.penalty(edge.to)));
+            if camera.is_infinite() {
+                continue;
+            }
+            let candidate = base_cost[index] * (1.0 + camera);
+            best[index] = candidate;
+            let estimate = candidate
+                + heuristic(
+                    self.nodes[edge.to as usize].position(),
+                    destination_point,
+                    max_speed,
+                );
+            heap.push(QueueItem {
+                estimate,
+                cost: candidate,
+                index: u32::try_from(index).unwrap_or(u32::MAX),
+            });
+        }
+
+        let mut last_edge: Option<usize> = None;
+        while let Some(item) = heap.pop() {
+            let current = item.index as usize;
+            let recorded = best[current];
+            if item.cost > recorded + 1e-3 {
+                continue;
+            }
+            let edge = self.edges[current];
+            if edge.to == goal_node {
+                last_edge = Some(current);
+                break;
+            }
+            let turn_from = f64::from(bearing_deg[current]);
+            for next in self.offsets[edge.to as usize] as usize
+                ..self.offsets[edge.to as usize + 1] as usize
+            {
+                let next_edge = self.edges[next];
+                if deterrent.is_some_and(|d| d.blocks_edge(next)) {
+                    continue;
+                }
+                let camera = deterrent.map_or(0.0, |d| f64::from(d.penalty(next_edge.to)));
+                if camera.is_infinite() {
+                    continue;
+                }
+                let angle = normalize_degrees(f64::from(bearing_deg[next]) - turn_from).abs();
+                let cost = recorded
+                    + base_cost[next] * (1.0 + camera)
+                    + profile.turns.for_angle(angle);
+                if cost + 1e-6 >= best[next] {
+                    continue;
+                }
+                best[next] = cost;
+                came[next] = u32::try_from(current).unwrap_or(u32::MAX);
+                let estimate = cost
+                    + heuristic(
+                        self.nodes[next_edge.to as usize].position(),
+                        destination_point,
+                        max_speed,
+                    );
+                heap.push(QueueItem {
+                    estimate,
+                    cost,
+                    index: u32::try_from(next).unwrap_or(u32::MAX),
+                });
+            }
+        }
+
+        let Some(mut cursor) = last_edge else {
+            return Err(RoutingError::NoPath);
+        };
+        let mut edges = vec![cursor as u64];
+        while came[cursor] != u32::MAX {
+            cursor = came[cursor] as usize;
+            edges.push(cursor as u64);
+        }
+        edges.reverse();
+        Ok(edges)
+    }
+
 }
 
 struct Leg {
@@ -229,9 +353,9 @@ struct Leg {
     end_index: u32,
 }
 
-fn heuristic(from: LatLng, to: LatLng) -> f64 {
+fn heuristic(from: LatLng, to: LatLng, max_speed_kmh: u16) -> f64 {
     haversine_m(from.latitude, from.longitude, to.latitude, to.longitude)
-        / (HEURISTIC_SPEED_KMH / 3.6)
+        / (f64::from(max_speed_kmh).max(1.0) / 3.6)
 }
 
 #[allow(
@@ -347,7 +471,7 @@ fn build_steps(
     steps
 }
 
-fn bearing(from: LatLng, to: LatLng) -> f64 {
+pub(crate) fn bearing(from: LatLng, to: LatLng) -> f64 {
     let phi1 = from.latitude.to_radians();
     let phi2 = to.latitude.to_radians();
     let delta_lambda = (to.longitude - from.longitude).to_radians();
@@ -356,7 +480,7 @@ fn bearing(from: LatLng, to: LatLng) -> f64 {
     y.atan2(x).to_degrees().rem_euclid(360.0)
 }
 
-fn normalize_degrees(value: f64) -> f64 {
+pub(crate) fn normalize_degrees(value: f64) -> f64 {
     (value + 540.0).rem_euclid(360.0) - 180.0
 }
 
