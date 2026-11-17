@@ -218,7 +218,7 @@ mod tests {
         let ways = vec![WayInfo {
             name: "大路".to_owned(),
             highway: "primary".to_owned(),
-        }];
+         ..WayInfo::default() }];
         let edges = vec![
             Edge {
                 to: 1,

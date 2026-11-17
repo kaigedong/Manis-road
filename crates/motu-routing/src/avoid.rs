@@ -211,7 +211,7 @@ mod tests {
             GraphNode { id: 3, lat: 31.2340, lon: 121.4720 },
             GraphNode { id: 4, lat: 31.2310, lon: 121.4710 },
         ];
-        let ways = vec![WayInfo { name: "demo".to_owned(), highway: "primary".to_owned() }];
+        let ways = vec![WayInfo { name: "demo".to_owned(), highway: "primary".to_owned() , ..WayInfo::default() }];
         let edges = vec![
             Edge { to: 4, distance_m: 150.0, speed_kmh: 30, way: 0 },
             Edge { to: 2, distance_m: 700.0, speed_kmh: 30, way: 0 },

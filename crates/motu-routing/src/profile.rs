@@ -20,6 +20,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::graph::Surface;
+
 /// Per-road-class multipliers applied to travel time.
 ///
 /// Higher means "avoid unless it saves a lot of time". Trunk roads are the most
@@ -129,6 +131,13 @@ pub struct RouteProfile {
     /// acceleration penalty. Ignoring it is why the old model happily routed
     /// riders down arterials with a light every 200 m.
     pub signal_penalty_s: f64,
+    /// Extra multiplier per lane above two, applied only to arterial classes.
+    ///
+    /// Six-lane arterials are where the traffic and the left-turn chaos live, so
+    /// "same class, more lanes" must cost more rather than less.
+    pub lane_step: f64,
+    /// Multiplier for unpaved ways; gravel is slower and worse on a motorcycle.
+    pub unpaved_factor: f64,
 }
 
 impl Default for RouteProfile {
@@ -146,6 +155,8 @@ impl RouteProfile {
             classes: ClassWeights::default(),
             turns: TurnPenalties::default(),
             signal_penalty_s: 12.0,
+            lane_step: 0.06,
+            unpaved_factor: 1.6,
         }
     }
 
@@ -153,6 +164,28 @@ impl RouteProfile {
     #[must_use]
     pub fn class_weight(&self, highway: &str) -> f64 {
         self.classes.for_highway(highway)
+    }
+
+    /// Full static factor for one way: class, lane count and surface.
+    #[must_use]
+    pub fn way_factor(&self, highway: &str, lanes: u8, surface: Surface) -> f64 {
+        let mut factor = self.class_weight(highway);
+        let arterial = matches!(
+            highway,
+            "trunk"
+                | "trunk_link"
+                | "primary"
+                | "primary_link"
+                | "secondary"
+                | "secondary_link"
+        );
+        if arterial && lanes > 2 {
+            factor *= 1.0 + f64::from(lanes - 2) * self.lane_step;
+        }
+        if surface == Surface::Unpaved {
+            factor *= self.unpaved_factor;
+        }
+        factor
     }
 }
 
@@ -191,6 +224,34 @@ mod tests {
                 "{highway} must not be discounted"
             );
         }
+    }
+
+    #[test]
+    fn wider_arterials_cost_more() {
+        let profile = RouteProfile::motorcycle_default();
+        let two_lanes = profile.way_factor("primary", 2, Surface::Paved);
+        let six_lanes = profile.way_factor("primary", 6, Surface::Paved);
+        assert!(six_lanes > two_lanes, "{six_lanes} vs {two_lanes}");
+        // Lane count must not change a residential street's cost: it is already
+        // the cheap option and OSM lane tags there are unreliable.
+        assert_eq!(
+            profile.way_factor("residential", 1, Surface::Paved),
+            profile.way_factor("residential", 4, Surface::Paved)
+        );
+    }
+
+    #[test]
+    fn unpaved_costs_more_than_paved() {
+        let profile = RouteProfile::motorcycle_default();
+        assert!(
+            profile.way_factor("tertiary", 1, Surface::Unpaved)
+                > profile.way_factor("tertiary", 1, Surface::Paved)
+        );
+        // Unknown must not be silently treated as unpaved.
+        assert_eq!(
+            profile.way_factor("tertiary", 1, Surface::Unknown),
+            profile.way_factor("tertiary", 1, Surface::Paved)
+        );
     }
 
     #[test]

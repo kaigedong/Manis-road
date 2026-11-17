@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use serde::Deserialize;
 
 use crate::error::{Result, RoutingError};
-use crate::graph::{Edge, GraphNode, RoadGraph, WayInfo, haversine_m};
+use crate::graph::{Edge, GraphNode, RoadGraph, Surface, WayInfo, haversine_m};
 
 /// Ways we are willing to route motorcycles on.
 const ALLOWED_HIGHWAYS: &[&str] = &[
@@ -200,6 +200,31 @@ fn way_info(tags: &HashMap<String, String>) -> WayInfo {
     WayInfo {
         name: tags.get("name").cloned().unwrap_or_default(),
         highway: tags.get("highway").cloned().unwrap_or_default(),
+        lanes: parse_lanes(tags.get("lanes").map_or("", String::as_str)),
+        surface: parse_surface(tags.get("surface").map_or("", String::as_str)),
+    }
+}
+
+/// `lanes` is occasionally a semicolon list; take the first usable number.
+fn parse_lanes(value: &str) -> u8 {
+    value
+        .split(';')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .parse()
+        .unwrap_or(0)
+}
+
+/// Only the clear cases are classified; everything else stays `Unknown` so the
+/// cost model does not invent smoothness.
+fn parse_surface(value: &str) -> Surface {
+    match value.trim() {
+        "asphalt" | "concrete" | "concrete:plates" | "concrete:lanes" | "paving_stones" | "sett"
+        | "cobblestone" | "metal" | "wood" | "bricks" | "stone" | "chipseal" => Surface::Paved,
+        "unpaved" | "gravel" | "fine_gravel" | "compacted" | "dirt" | "earth" | "ground" | "grass"
+        | "sand" | "mud" | "pebblestone" | "woodchips" | "snow" | "ice" | "salt" => Surface::Unpaved,
+        _ => Surface::Unknown,
     }
 }
 
@@ -385,6 +410,40 @@ mod tests {
         let (graph, report) = build_from_osm_json(&data).expect("build");
         assert_eq!(report.ways_used, 0);
         assert_eq!(graph.edge_count(), 0);
+    }
+
+    #[test]
+    fn parses_lanes_and_surface() {
+        let data = json(serde_json::json!({
+            "elements": [
+                {"type": "node", "id": 1, "lat": 31.2300, "lon": 121.4700},
+                {"type": "node", "id": 2, "lat": 31.2310, "lon": 121.4710},
+                {"type": "way", "id": 1, "nodes": [1, 2],
+                 "tags": {"highway": "primary", "lanes": "6", "surface": "asphalt"}},
+                {"type": "way", "id": 2, "nodes": [1, 2],
+                 "tags": {"highway": "track", "surface": "gravel"}},
+                {"type": "way", "id": 3, "nodes": [1, 2],
+                 "tags": {"highway": "residential"}},
+                {"type": "way", "id": 4, "nodes": [1, 2],
+                 "tags": {"highway": "secondary", "lanes": "2;3"}}
+            ]
+        }));
+        let (graph, _) = build_from_osm_json(&data).expect("build");
+        let by_name = |highway: &str| {
+            graph
+                .ways
+                .iter()
+                .find(|way| way.highway == highway)
+                .unwrap_or_else(|| panic!("no {highway} way"))
+        };
+        let primary = by_name("primary");
+        assert_eq!(primary.lanes, 6);
+        assert_eq!(primary.surface, Surface::Paved);
+        let untagged = by_name("residential");
+        assert_eq!(untagged.lanes, 0);
+        assert_eq!(untagged.surface, Surface::Unknown);
+        let semicolon = by_name("secondary");
+        assert_eq!(semicolon.lanes, 2, "first value of a list");
     }
 
     #[test]

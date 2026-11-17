@@ -49,7 +49,7 @@ fn grid() -> RoadGraph {
     let ways = vec![WayInfo {
         name: "网格路".to_owned(),
         highway: "residential".to_owned(),
-    }];
+     ..WayInfo::default() }];
 
     // Build adjacency, then flatten into CSR.
     let mut adjacency: Vec<Vec<Edge>> = vec![Vec::new(); nodes.len()];

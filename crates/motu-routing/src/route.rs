@@ -286,7 +286,13 @@ impl RoadGraph {
                 let traffic = context
                     .prior
                     .map_or(1.0, |prior| prior.factor(context.hour, highway));
-                base_cost[index] = edge.duration_s() * profile.class_weight(highway) * traffic;
+                let way = self.ways.get(edge.way as usize);
+                let static_factor = profile.way_factor(
+                    highway,
+                    way.map_or(0, |info| info.lanes),
+                    way.map_or(crate::graph::Surface::Unknown, |info| info.surface),
+                );
+                base_cost[index] = edge.duration_s() * static_factor * traffic;
                 bearing_deg[index] = bearing(from, self.nodes[edge.to as usize].position()) as f32;
             }
         }
@@ -565,10 +571,10 @@ mod tests {
             GraphNode { id: 4, lat: 31.230, lon: 121.476 },
         ];
         let ways = vec![
-            WayInfo { name: "南北路".to_owned(), highway: "primary".to_owned() },
-            WayInfo { name: "东西路".to_owned(), highway: "primary".to_owned() },
-            WayInfo { name: "南路".to_owned(), highway: "secondary".to_owned() },
-            WayInfo { name: "西路".to_owned(), highway: "secondary".to_owned() },
+            WayInfo { name: "南北路".to_owned(), highway: "primary".to_owned() , ..WayInfo::default() },
+            WayInfo { name: "东西路".to_owned(), highway: "primary".to_owned() , ..WayInfo::default() },
+            WayInfo { name: "南路".to_owned(), highway: "secondary".to_owned() , ..WayInfo::default() },
+            WayInfo { name: "西路".to_owned(), highway: "secondary".to_owned() , ..WayInfo::default() },
         ];
         let edges = vec![
             Edge { to: 1, distance_m: 445.0, speed_kmh: 40, way: 0 },

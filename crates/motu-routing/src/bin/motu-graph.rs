@@ -61,6 +61,22 @@ fn run() -> Result<(), String> {
             if let Some((south, west, north, east)) = bounds {
                 println!("bounds {south:.5},{west:.5} .. {north:.5},{east:.5}");
             }
+            let tagged_lanes = graph.ways.iter().filter(|way| way.lanes > 0).count();
+            let unpaved = graph
+                .ways
+                .iter()
+                .filter(|way| way.surface == motu_routing::graph::Surface::Unpaved)
+                .count();
+            let paved = graph
+                .ways
+                .iter()
+                .filter(|way| way.surface == motu_routing::graph::Surface::Paved)
+                .count();
+            println!(
+                "ways lanes-tagged {tagged_lanes}/{}  surface paved {paved} unpaved {unpaved} unknown {}",
+                graph.ways.len(),
+                graph.ways.len() - paved - unpaved
+            );
             if graph.signals.is_empty() {
                 println!("signals unknown (graph predates signal data)");
             } else {
@@ -186,6 +202,8 @@ fn neutral_profile() -> RouteProfile {
             u_turn_s: 0.0,
         },
         signal_penalty_s: 0.0,
+        lane_step: 0.0,
+        unpaved_factor: 1.0,
     }
 }
 

@@ -22,6 +22,9 @@ edge cost = duration_s × class_weight(highway)   // 等级偏好
 | `tertiary` / `tertiary_link` | 1.1 |
 | `residential` / `unclassified` / `living_street` / `service` | 1.0 |
 
+车道与路面（v3 图才有）：干道每多一条车道（>2）成本 +6%；未铺装路面 ×1.6。
+`surface` 缺失时保持 `Unknown` 且不加罚——不猜“应该是柏油”。
+
 | 转向（航向变化） | 惩罚 |
 |---|---|
 | < 25°（直行） | 0 s |
@@ -95,9 +98,10 @@ motu-graph metrics var/offline/graph-od.bin 31.1951,121.4368 31.3030,121.5150 \
 | 版本 | 内容 | 加载 |
 |---|---|---|
 | v1 | 节点无信号灯标记 | 仍可加载，`signals` 为空 → 指标报 `None` |
-| v2 | 节点后追加每节点 1 字节信号灯标记 | 完整支持 |
+| v2 | 节点后追加每节点 1 字节信号灯标记 | 支持 |
+| v3 | way 追加 `lanes` 与 `surface` 各 1 字节 | 完整支持 |
 
-重建 v2 图需要带节点标签的 Overpass 抽取（`out body;>;out body qt;`，注意第二个
+重建 v3 图需要带节点标签的 Overpass 抽取（`out body;>;out body qt;`，注意第二个
 `out` 不是 `skel`）：
 
 ```bash

@@ -5,7 +5,7 @@
 //! straight line is available.
 
 use motu_core::LatLng;
-use motu_routing::graph::{Edge, GraphNode, RoadGraph, WayInfo};
+use motu_routing::graph::{Edge, GraphNode, RoadGraph, Surface, WayInfo};
 use motu_routing::{ClassWeights, RouteProfile, TurnPenalties};
 
 fn node(id: i64, lat: f64, lon: f64) -> GraphNode {
@@ -42,6 +42,8 @@ fn neutral_profile() -> RouteProfile {
             u_turn_s: 0.0,
         },
         signal_penalty_s: 0.0,
+        lane_step: 0.0,
+        unpaved_factor: 1.0,
     }
 }
 
@@ -59,11 +61,11 @@ fn shortcut_vs_detour() -> RoadGraph {
         WayInfo {
             name: "大路".to_owned(),
             highway: "primary".to_owned(),
-        },
+         ..WayInfo::default() },
         WayInfo {
             name: "小路".to_owned(),
             highway: "residential".to_owned(),
-        },
+         ..WayInfo::default() },
     ];
     let edges = vec![
         edge(2, 1200.0, 30, 0), // 0: A -> D, primary
@@ -91,11 +93,11 @@ fn straight_vs_bend() -> RoadGraph {
         WayInfo {
             name: "直路".to_owned(),
             highway: "residential".to_owned(),
-        },
+         ..WayInfo::default() },
         WayInfo {
             name: "弯路".to_owned(),
             highway: "residential".to_owned(),
-        },
+         ..WayInfo::default() },
     ];
     let edges = vec![
         edge(3, 600.0, 30, 0), // 0: A -> straight point
@@ -213,11 +215,11 @@ fn signal_vs_detour(south_signalled: bool) -> RoadGraph {
         WayInfo {
             name: "南线".to_owned(),
             highway: "residential".to_owned(),
-        },
+         ..WayInfo::default() },
         WayInfo {
             name: "北线".to_owned(),
             highway: "residential".to_owned(),
-        },
+         ..WayInfo::default() },
     ];
     // CSR order: node 0 owns 0-1, node 1 owns 2, node 2 owns none, node 3 owns 3.
     let edges = vec![
@@ -270,5 +272,85 @@ fn a_signal_makes_the_shortcut_unattractive() {
         metrics.signals_per_km,
         Some(0.0),
         "the chosen route crosses no light, and the graph knows about lights"
+    );
+}
+
+/// Three corridors between A and D: a short gravel line, a slightly longer
+/// paved residential line, and a wide arterial.
+fn surface_vs_lanes() -> RoadGraph {
+    let nodes = vec![
+        node(1, 31.2300, 121.4700), // A
+        node(2, 31.2300, 121.4730), // gravel midpoint
+        node(3, 31.2315, 121.4740), // paved midpoint
+        node(4, 31.2300, 121.4800), // D
+        node(5, 31.2330, 121.4735), // wide arterial midpoint
+    ];
+    let ways = vec![
+        WayInfo {
+            name: "碎石小路".to_owned(),
+            highway: "residential".to_owned(),
+            lanes: 1,
+            surface: Surface::Unpaved,
+        },
+        WayInfo {
+            name: "铺装小路".to_owned(),
+            highway: "residential".to_owned(),
+            lanes: 1,
+            surface: Surface::Paved,
+        },
+        WayInfo {
+            name: "八车道大路".to_owned(),
+            highway: "primary".to_owned(),
+            lanes: 8,
+            surface: Surface::Paved,
+        },
+    ];
+    let edges = vec![
+        edge(1, 600.0, 30, 0),  // 0: A -> gravel mid
+        edge(2, 950.0, 30, 1),  // 1: A -> paved mid
+        edge(4, 725.0, 30, 2),  // 2: A -> arterial mid
+        edge(3, 725.0, 30, 0),  // 3: gravel mid -> D
+        edge(3, 950.0, 30, 1),  // 4: paved mid -> D
+        edge(3, 725.0, 30, 2),  // 5: arterial mid -> D
+    ];
+    RoadGraph {
+        nodes,
+        signals: Vec::new(),
+        ways,
+        offsets: vec![0, 3, 4, 5, 5, 6],
+        edges,
+    }
+}
+
+#[test]
+fn surface_and_lane_factors_change_the_choice() {
+    let graph = surface_vs_lanes();
+    let origin = LatLng::new(31.2300, 121.4700);
+    let destination = LatLng::new(31.2300, 121.4800);
+
+    let passes_near = |plan: &motu_routing::RoutePlan, lat: f64| {
+        plan.points
+            .iter()
+            .any(|point| (point.latitude - lat).abs() < 1e-6)
+    };
+
+    // Neutral profile: the shortest line wins, gravel or not.
+    let (plain, _) = graph
+        .route_report(origin, destination, &neutral_profile(), None)
+        .expect("plain route");
+    assert!(
+        passes_near(&plain, 31.2300) && !passes_near(&plain, 31.2315),
+        "without factors the short gravel line wins"
+    );
+
+    // Motorcycle profile: unpaved costs 1.6× and the eight-lane arterial 1.36×
+    // on top of its class weight, so the slightly longer paved street wins.
+    let (paved, _) = graph
+        .route_report(origin, destination, &RouteProfile::motorcycle_default(), None)
+        .expect("motorcycle route");
+    assert!(
+        passes_near(&paved, 31.2315),
+        "the paved residential corridor must win, points: {:?}",
+        paved.points
     );
 }

@@ -12,9 +12,11 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Result, RoutingError};
 
 const MAGIC: &[u8; 8] = b"MOTUGRPH";
-const VERSION: u32 = 2;
-/// Version 1 had no signal data; it still loads, with `signals` left empty.
+const VERSION: u32 = 3;
+/// Oldest layout still accepted: v1 had no signal flags, v2 no lanes/surface.
 const VERSION_LEGACY: u32 = 1;
+/// First version that carries per-way lanes and surface.
+const VERSION_WAY_SURFACE: u32 = 3;
 
 /// One graph node, keyed by the OSM node id.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -31,12 +33,49 @@ impl GraphNode {
     }
 }
 
+/// Coarse surface class. `Unknown` is the honest default: most OSM ways carry
+/// no `surface` tag, and guessing "paved" would hide gravel tracks from the
+/// cost model.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Surface {
+    #[default]
+    Unknown,
+    Paved,
+    Unpaved,
+}
+
+impl Surface {
+    #[must_use]
+    pub fn code(self) -> u8 {
+        match self {
+            Self::Unknown => 0,
+            Self::Paved => 1,
+            Self::Unpaved => 2,
+        }
+    }
+
+    #[must_use]
+    pub fn from_code(code: u8) -> Self {
+        match code {
+            1 => Self::Paved,
+            2 => Self::Unpaved,
+            _ => Self::Unknown,
+        }
+    }
+}
+
 /// Metadata for one OSM way used by the graph.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WayInfo {
     #[serde(default)]
     pub name: String,
     pub highway: String,
+    /// OSM `lanes`, 0 when untagged.
+    #[serde(default)]
+    pub lanes: u8,
+    #[serde(default)]
+    pub surface: Surface,
 }
 
 /// One directed edge in compressed adjacency storage.
@@ -244,6 +283,7 @@ impl RoadGraph {
         for way in &self.ways {
             write_string(&mut writer, &way.name)?;
             write_string(&mut writer, &way.highway)?;
+            writer.write_all(&[way.lanes, way.surface.code()])?;
         }
 
         let edge_count = u32::try_from(self.edges.len())
@@ -272,7 +312,7 @@ impl RoadGraph {
             return Err(RoutingError::InvalidGraph("bad magic".to_owned()));
         }
         let version = read_u32(&mut reader)?;
-        if version != VERSION && version != VERSION_LEGACY {
+        if !(VERSION_LEGACY..=VERSION).contains(&version) {
             return Err(RoutingError::InvalidGraph(format!(
                 "unsupported version {version}"
             )));
@@ -301,7 +341,19 @@ impl RoadGraph {
         for _ in 0..way_count {
             let name = read_string(&mut reader)?;
             let highway = read_string(&mut reader)?;
-            ways.push(WayInfo { name, highway });
+            let (lanes, surface) = if version >= VERSION_WAY_SURFACE {
+                let mut bytes = [0_u8; 2];
+                reader.read_exact(&mut bytes)?;
+                (bytes[0], Surface::from_code(bytes[1]))
+            } else {
+                (0, Surface::Unknown)
+            };
+            ways.push(WayInfo {
+                name,
+                highway,
+                lanes,
+                surface,
+            });
         }
 
         let edge_count = read_u32(&mut reader)? as usize;
@@ -434,7 +486,7 @@ mod tests {
             ways: vec![WayInfo {
                 name: "测试路".to_owned(),
                 highway: "primary".to_owned(),
-            }],
+             ..WayInfo::default() }],
             offsets: vec![0, 1, 1],
             edges: vec![Edge {
                 to: 1,
@@ -511,7 +563,12 @@ mod tests {
                 GraphNode { id: 2, lat: 31.231, lon: 121.471 },
             ],
             signals: vec![false, true],
-            ways: vec![WayInfo { name: "路".to_owned(), highway: "residential".to_owned() }],
+            ways: vec![WayInfo {
+                name: "路".to_owned(),
+                highway: "residential".to_owned(),
+                lanes: 2,
+                surface: Surface::Unpaved,
+            }],
             offsets: vec![0, 1, 1],
             edges: vec![Edge { to: 1, distance_m: 100.0, speed_kmh: 30, way: 0 }],
         };
@@ -522,6 +579,8 @@ mod tests {
         let loaded = RoadGraph::load(&path).expect("load");
         assert_eq!(loaded.signals, vec![false, true]);
         assert_eq!(loaded.nodes.len(), 2);
+        assert_eq!(loaded.ways[0].lanes, 2);
+        assert_eq!(loaded.ways[0].surface, Surface::Unpaved);
         std::fs::remove_file(&path).ok();
     }
 }
