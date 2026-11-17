@@ -95,6 +95,13 @@ motu-graph metrics var/offline/graph-od.bin 31.1951,121.4368 31.3030,121.5150 \
   --avoid var/offline/avoid-demo.json    # [[[lat,lon], ...]]
 ```
 
+## 实测先验
+
+`motu-prior build --graph <graph.bin> --trace <ride.jsonl> --out <prior.json>`
+把本机记录的骑行轨迹聚合成 `source: "measured"` 的时段先验；样本不足的格子保持
+1.0 并列入报告的「丢弃」清单，不从小样本编权重。`--explain` 逐跳说明为什么被采纳
+或被丢（时间间隔、速度异常、偏离路网、方向不匹配等）。
+
 ## 基准对比
 
 `motu-parity compare --graph <graph.bin> --baseline <baseline.json>` 用本机图重算

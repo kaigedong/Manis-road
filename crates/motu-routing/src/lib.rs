@@ -17,6 +17,7 @@ pub mod graph;
 pub mod metrics;
 pub mod osm;
 pub mod parity;
+pub mod prior_build;
 pub mod profile;
 pub mod replan;
 pub mod route;

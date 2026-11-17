@@ -18,6 +18,10 @@ path = "src/bin/motu-graph.rs"
 name = "motu-parity"
 path = "src/bin/motu-parity.rs"
 
+[[bin]]
+name = "motu-prior"
+path = "src/bin/motu-prior.rs"
+
 [dependencies]
 manis-motu-core = { path = "../motu-core" }
 serde = { version = "1", features = ["derive"] }

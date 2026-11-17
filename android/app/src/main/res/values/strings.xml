@@ -142,4 +142,5 @@
     <string name="nav_last_leg">最后一段，沿当前道路直行</string>
     <string name="nav_offset">偏离路线 %1$d m</string>
     <string name="tiles_missing">缺少离线瓦片 tiles.pmtiles，请先 push 到 files/offline/</string>
+    <string name="trace_saved">轨迹已保存：%1$s（%2$d KB）</string>
 </resources>

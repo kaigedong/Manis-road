@@ -481,6 +481,9 @@ public final class BaseMapActivity extends Activity {
     private long lastReplanAtMs;
     private int replanCount;
     private boolean navigating;
+    /** 骑行轨迹写盘：实测时段先验的唯一数据来源，只留本机。 */
+    private java.io.Writer traceWriter;
+    private java.io.File traceFile;
     private boolean waitingForFix;
 
     private static final int REQUEST_LOCATION = 42;
@@ -547,6 +550,7 @@ public final class BaseMapActivity extends Activity {
         }
         navigating = true;
         waitingForFix = true;
+        startTrace();
         replanCount = 0;
         lastReplanAtMs = 0L;
         findViewById(R.id.text_replan_result).setVisibility(android.view.View.GONE);
@@ -558,6 +562,7 @@ public final class BaseMapActivity extends Activity {
 
     private void stopNavigation(String message) {
         navigating = false;
+        stopTrace();
         if (locationManager != null && locationListener != null) {
             try {
                 locationManager.removeUpdates(locationListener);
@@ -573,6 +578,7 @@ public final class BaseMapActivity extends Activity {
     /** 每来一次定位：移动蓝点、判断偏航、必要时重算、更新剩余里程。 */
     private void onLocationChanged(android.location.Location location) {
         waitingForFix = false;
+        recordFix(location);
         updateMe(location.getLongitude(), location.getLatitude());
         if (navMap != null && navigating) {
             navMap.animateCamera(org.maplibre.android.camera.CameraUpdateFactory
@@ -794,5 +800,63 @@ public final class BaseMapActivity extends Activity {
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
         mapView.onSaveInstanceState(outState);
+    }
+
+    // ---- 轨迹记录 ----
+
+    /** 开一段轨迹文件：`files/traces/ride-<unix>.jsonl`。 */
+    private void startTrace() {
+        try {
+            java.io.File dir = new java.io.File(getFilesDir(), "traces");
+            if (!dir.exists() && !dir.mkdirs()) {
+                Log.w(TAG, "cannot create trace dir");
+                return;
+            }
+            traceFile = new java.io.File(dir, "ride-" + System.currentTimeMillis() / 1000 + ".jsonl");
+            traceWriter = new java.io.BufferedWriter(new java.io.OutputStreamWriter(
+                    new java.io.FileOutputStream(traceFile, true),
+                    java.nio.charset.StandardCharsets.UTF_8));
+            Log.i(TAG, "recording trace to " + traceFile);
+        } catch (java.io.IOException error) {
+            Log.w(TAG, "trace open failed: " + error);
+            traceWriter = null;
+            traceFile = null;
+        }
+    }
+
+    /** 每次定位落一行，字段与 `motu-prior` 读的格式一致。 */
+    private void recordFix(android.location.Location location) {
+        if (traceWriter == null) {
+            return;
+        }
+        try {
+            String line = String.format(java.util.Locale.US,
+                    "{\"t\":%d,\"lat\":%.7f,\"lon\":%.7f,\"speedMps\":%.2f}%n",
+                    location.getTime() / 1000,
+                    location.getLatitude(),
+                    location.getLongitude(),
+                    location.hasSpeed() ? location.getSpeed() : 0.0);
+            traceWriter.write(line);
+            traceWriter.flush();
+        } catch (java.io.IOException error) {
+            Log.w(TAG, "trace write failed: " + error);
+        }
+    }
+
+    private void stopTrace() {
+        if (traceWriter != null) {
+            try {
+                traceWriter.close();
+            } catch (java.io.IOException ignored) {
+                // 关闭失败没有补救动作。
+            }
+            traceWriter = null;
+        }
+        if (traceFile != null && traceFile.isFile()) {
+            Toast.makeText(this, getString(R.string.trace_saved,
+                    traceFile.getAbsolutePath(), traceFile.length() / 1024),
+                    Toast.LENGTH_LONG).show();
+            traceFile = null;
+        }
     }
 }
