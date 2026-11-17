@@ -178,14 +178,10 @@ public final class BaseMapActivity extends Activity {
     private void planAndDraw(org.maplibre.android.maps.MapLibreMap map, Style style) {
         new Thread(() -> {
             try {
-                String graphPath = OfflineData.graphFile(this).getAbsolutePath();
-                CoreResult result = MotuCore.route(graphPath,
-                        ORIGIN_LAT, ORIGIN_LON, DEST_LAT, DEST_LON);
-                JSONObject data = result.objectData();
-                if (!result.ok || data == null) {
+                JSONObject data = requestRoute(ORIGIN_LAT, ORIGIN_LON);
+                if (data == null) {
                     runOnUiThread(() -> Toast.makeText(this,
-                            getString(R.string.base_map_route_failed, result.error),
-                            Toast.LENGTH_LONG).show());
+                            R.string.base_map_route_failed_short, Toast.LENGTH_LONG).show());
                     return;
                 }
                 JSONArray points = data.optJSONArray("points");
@@ -235,6 +231,10 @@ public final class BaseMapActivity extends Activity {
                             80));
                     Toast.makeText(this, getString(R.string.base_map_route_ready,
                             Math.round(meters / 100.0) / 10.0), Toast.LENGTH_SHORT).show();
+                    // 把「这次规划用了什么先验」直接写在状态栏，别让用户猜。
+                    ((android.widget.TextView) findViewById(R.id.text_nav_status)).setText(
+                            getString(R.string.nav_planned,
+                                    meters / 1000.0, priorSourceLabel(), priorHour));
                     if (!replanCheckDone) {
                         replanCheckDone = true;
                         runReplanCheck();
@@ -608,11 +608,9 @@ public final class BaseMapActivity extends Activity {
     }
 
     private void replanFrom(double latitude, double longitude) {
-        String graphPath = OfflineData.graphFile(this).getAbsolutePath();
         long began = System.nanoTime();
-        CoreResult result = MotuCore.route(graphPath, latitude, longitude, DEST_LAT, DEST_LON);
+        JSONObject data = requestRoute(latitude, longitude);
         long elapsedMs = (System.nanoTime() - began) / 1_000_000;
-        JSONObject data = result.objectData();
         if (data == null || data.optJSONArray("points") == null) {
             return;
         }
@@ -624,6 +622,45 @@ public final class BaseMapActivity extends Activity {
         drawRoute();
         Toast.makeText(this, getString(R.string.nav_replanned, replanCount, elapsedMs),
                 Toast.LENGTH_SHORT).show();
+    }
+
+    /** 先验来源，用来在界面上如实标注（none / assumption / measured）。 */
+    private String priorSource = "none";
+    private int priorHour = -1;
+
+    /**
+     * 用三层成本模型规划：静态画像 + 时段先验 + 禁摩区域。
+     *
+     * <p>前两者都来自 `.mrdp`：`traffic-prior.json` 与 `avoid.json`。
+     * 小时取本机当前时间；没有先验文件就不假装有时段因素。</p>
+     */
+    private JSONObject requestRoute(double originLat, double originLon) {
+        String priorPath = "";
+        java.io.File prior = OfflineData.priorFile(this);
+        if (prior.isFile()) {
+            priorPath = prior.getAbsolutePath();
+        }
+        String avoidJson = "[]";
+        java.io.File avoid = OfflineData.avoidFile(this);
+        if (avoid.isFile()) {
+            String text = OfflineData.readText(avoid);
+            if (text != null && !text.trim().isEmpty()) {
+                avoidJson = text;
+            }
+        }
+        priorHour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY);
+        CoreResult result = MotuCore.routeWithContext(
+                OfflineData.graphFile(this).getAbsolutePath(),
+                originLat, originLon, DEST_LAT, DEST_LON, priorPath, priorHour, avoidJson);
+        JSONObject data = result.objectData();
+        if (!result.ok || data == null) {
+            Log.w(TAG, "routeWithContext failed: " + result.error
+                    + " (prior=" + priorPath + ", hour=" + priorHour + ")");
+            return null;
+        }
+        priorSource = data.optString("priorSource", "none");
+        JSONObject plan = data.optJSONObject("plan");
+        return plan != null ? plan : data;
     }
 
     /** 把当前路线重新画到地图上（首次规划与重算共用）。 */
@@ -678,6 +715,10 @@ public final class BaseMapActivity extends Activity {
             status.append(getString(R.string.nav_running,
                     remaining / 1000.0, minutes, (int) Math.round(NAV_SPEED_MPS * 3.6)));
             status.append('\n').append(nextInstruction(nearest, deviation));
+            if (!"none".equals(priorSource)) {
+                status.append('\n').append(getString(R.string.nav_prior,
+                        priorSourceLabel(), priorHour));
+            }
         }
         ((android.widget.TextView) findViewById(R.id.text_nav_status)).setText(status);
     }
@@ -858,5 +899,16 @@ public final class BaseMapActivity extends Activity {
                     Toast.LENGTH_LONG).show();
             traceFile = null;
         }
+    }
+
+    /** 如实标注先验来源：实测 / 假设 / 无。 */
+    private String priorSourceLabel() {
+        if ("measured".equals(priorSource)) {
+            return getString(R.string.prior_measured);
+        }
+        if ("assumption".equals(priorSource)) {
+            return getString(R.string.prior_assumption);
+        }
+        return getString(R.string.prior_none);
     }
 }

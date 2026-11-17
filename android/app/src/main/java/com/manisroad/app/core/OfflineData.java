@@ -32,6 +32,16 @@ public final class OfflineData {
         return externalFile != null ? externalFile : internal;
     }
 
+    /** 时段车流先验（`source` 区分 measured / assumption）。 */
+    public static File priorFile(Context context) {
+        return pick(context, "traffic-prior.json");
+    }
+
+    /** 禁摩/限行多边形。 */
+    public static File avoidFile(Context context) {
+        return pick(context, "avoid.json");
+    }
+
     /** `.mrdp` 里解出来的离线瓦片归档。 */
     public static File tilesFile(Context context) {
         return pick(context, "tiles.pmtiles");

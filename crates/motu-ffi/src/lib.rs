@@ -43,6 +43,12 @@ struct LoadedGraph {
 }
 
 /// Cached `tiles.pmtiles` archive; the app asks for one tile per map frame.
+/// Cached traffic prior; `routeWithContext` reads it on every plan/re-plan.
+struct LoadedPrior {
+    path: String,
+    prior: motu_routing::TrafficPrior,
+}
+
 struct LoadedTiles {
     path: String,
     tiles: TileSet,
@@ -55,6 +61,27 @@ struct FfiState {
     core: CoreState,
     graph: Option<LoadedGraph>,
     tiles: Option<LoadedTiles>,
+    prior: Option<LoadedPrior>,
+}
+
+fn prior_for<'a>(
+    state: &'a mut FfiState,
+    path: &str,
+) -> Result<&'a motu_routing::TrafficPrior, String> {
+    let path = path.trim();
+    if path.is_empty() {
+        return Err("prior path is empty".to_owned());
+    }
+    if state.prior.as_ref().is_some_and(|loaded| loaded.path == path) {
+        return Ok(&state.prior.as_ref().expect("checked above").prior);
+    }
+    let prior = motu_routing::TrafficPrior::load(Path::new(path))
+        .map_err(|error| error.to_string())?;
+    state.prior = Some(LoadedPrior {
+        path: path.to_owned(),
+        prior,
+    });
+    Ok(&state.prior.as_ref().expect("just stored").prior)
 }
 
 fn tiles_for<'a>(state: &'a mut FfiState, path: &str) -> Result<&'a TileSet, String> {
@@ -477,6 +504,74 @@ pub extern "system" fn Java_com_manisroad_app_core_MotuCore_nativeRoute(
         Ok(ok(
             serde_json::to_value(plan).map_err(|error| error.to_string())?
         ))
+    })();
+    jstring_out(&mut env, result.unwrap_or_else(err))
+}
+
+/// `nativeRouteWithContext(graphPath, oLat, oLon, dLat, dLon, priorPath, hour, avoidJson)`.
+///
+/// The full three-layer model: static profile + time-of-day prior + banned-area
+/// constraint. `priorPath` may be empty (no time dependence); `avoidJson` is a
+/// list of `[[lat, lon], ...]` polygons and may be empty.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_manisroad_app_core_MotuCore_nativeRouteWithContext(
+    mut env: JNIEnv,
+    _class: JClass,
+    graph_path: JString,
+    origin_lat: jdouble,
+    origin_lon: jdouble,
+    destination_lat: jdouble,
+    destination_lon: jdouble,
+    prior_path: JString,
+    hour: jint,
+    avoid_json: JString,
+) -> jstring {
+    let result: Result<String, String> = (|| {
+        let graph_path = string_arg(&mut env, &graph_path)?;
+        let prior_path = string_arg(&mut env, &prior_path)?;
+        let avoid_json = string_arg(&mut env, &avoid_json)?;
+        let origin = LatLng::new(origin_lat, origin_lon);
+        let destination = LatLng::new(destination_lat, destination_lon);
+        let hour = u8::try_from(hour).map_err(|_| format!("bad hour {hour}"))?;
+        if hour > 23 {
+            return Err(format!("hour must be 0..=23, got {hour}"));
+        }
+        let avoid: Vec<Vec<LatLng>> = if avoid_json.trim().is_empty() {
+            Vec::new()
+        } else {
+            parse_json(&avoid_json, "avoid")?
+        };
+
+        with_state(|state| {
+            let profile = motu_routing::RouteProfile::motorcycle_default();
+            // 先验很小，克隆一份再借图，避免同时可变借用 state。
+            let prior_owned = if prior_path.trim().is_empty() {
+                None
+            } else {
+                Some(prior_for(state, &prior_path)?.clone())
+            };
+            let context = motu_routing::RouteContext {
+                prior: prior_owned.as_ref(),
+                hour,
+                avoid: &avoid,
+            };
+            let graph = graph_for(state, &graph_path)?;
+            let (plan, metrics) = graph
+                .route_report_with_context(origin, destination, &profile, None, &context)
+                .map_err(|error| error.to_string())?;
+            let source = prior_owned.as_ref().map_or("none", |prior| match prior.source {
+                motu_routing::PriorSource::Measured => "measured",
+                motu_routing::PriorSource::Assumption => "assumption",
+            });
+            Ok(json!({
+                "plan": plan,
+                "metrics": metrics,
+                "priorSource": source,
+                "hour": hour,
+                "avoidAreas": avoid.len(),
+            }))
+        })
+        .map(|value| ok(value))
     })();
     jstring_out(&mut env, result.unwrap_or_else(err))
 }

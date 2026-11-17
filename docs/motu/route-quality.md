@@ -467,6 +467,40 @@ motu-prior build --graph var/offline/graph-od.bin \
 **这还不是「早高峰 vs 凌晨」的验收证据**——要填满那两个桶需要真实的多次骑行。
 但机制到数据的链路已经通了，`--explain` 也能告诉骑手为什么某一趟没被采纳。
 
+## 第 18 轮：三层模型全部上设备
+
+在此之前，App 里的规划只用了静态画像——时段先验和禁摩区域都还停在命令行。
+这一轮补齐：
+
+### JNI
+
+`nativeRouteWithContext(graph, oLat, oLon, dLat, dLon, priorPath, hour, avoidJson)`：
+读 `traffic-prior.json`（可空，表示不用时段因素）、`avoid.json`（`[[lat,lon],...]`），
+返回 `{plan, metrics, priorSource, hour, avoidAreas}`。响应里带 `priorSource`，
+是为了让界面能如实标注「实测 / 假设」，而不是含糊地说「已考虑路况」。
+
+### App
+
+- 规划与重算都走同一个 `requestRoute()`：小时取本机当前时间，缺文件就不假装有时段因素
+- 状态栏写明用什么先验规划：`已规划 9.05 km · 时段先验：实测 · 17 时`
+
+### 验证（模拟器）
+
+| 场景 | 结果 |
+|---|---|
+| 无禁摩区 | 8.48 km |
+| 禁摩框压住路线第 55 点 | **9.05 km**（+6.7%），设备上一致 |
+| 状态栏 | `已规划 9.05 km · 时段先验：实测 · 17 时` |
+| 同一 OD、实测先验下 hour=16 vs 17 | 折线不同（191 vs 190 点，路径哈希不同） |
+
+截图：[`images/android-prior-avoid.png`](images/android-prior-avoid.png)
+
+### 一个真实教训
+
+第一次把演示禁摩框放在了**起点**（人民广场）上，规划直接返回 `no route found`——
+这正是「禁摩区从规划期禁止」该有的行为：不是绕过去，而是根本走不通。
+把框移到路线中段后才有合理的绕行结果。
+
 ## 还没做
 
 - 实测时段先验（需高德路况 key 或骑行轨迹；当前只有 assumption 占位）

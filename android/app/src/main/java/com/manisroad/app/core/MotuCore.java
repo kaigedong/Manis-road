@@ -63,6 +63,11 @@ public final class MotuCore {
 
     private static native String nativeVehicleValidate(String vehicleJson);
 
+    private static native String nativeRouteWithContext(String graphPath, double originLat,
+                                                        double originLon, double destinationLat,
+                                                        double destinationLon, String priorPath,
+                                                        int hour, String avoidJson);
+
     private static native String nativeRouteAudit(String pointsJson, String areasJson,
                                                   String camerasJson, double bufferMeters);
 
@@ -218,6 +223,18 @@ public final class MotuCore {
     }
 
     /** Load (and cache) the offline road graph, returning node/edge counts. */
+    /**
+     * 三层成本模型规划：静态画像 + 时段先验 + 禁摩区域约束。
+     * {@code priorPath} 为空表示不用先验；{@code avoidJson} 是
+     * {@code [[lat,lon],...]} 的多边形列表。
+     */
+    public static CoreResult routeWithContext(String graphPath, double originLat, double originLon,
+                                              double destinationLat, double destinationLon,
+                                              String priorPath, int hour, String avoidJson) {
+        return CoreResult.parse(nativeRouteWithContext(graphPath, originLat, originLon,
+                destinationLat, destinationLon, priorPath, hour, avoidJson));
+    }
+
     /** 当前位置到折线的距离（米），用于判断偏航。 */
     public static CoreResult deviation(JSONArray points, double latitude, double longitude) {
         return CoreResult.parse(nativeDeviation(points.toString(), latitude, longitude));

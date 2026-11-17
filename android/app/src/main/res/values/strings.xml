@@ -143,4 +143,10 @@
     <string name="nav_offset">偏离路线 %1$d m</string>
     <string name="tiles_missing">缺少离线瓦片 tiles.pmtiles，请先 push 到 files/offline/</string>
     <string name="trace_saved">轨迹已保存：%1$s（%2$d KB）</string>
+    <string name="base_map_route_failed_short">规划失败（graph.bin 是否已 push？）</string>
+    <string name="nav_prior">时段先验：%1$s · %2$d 时</string>
+    <string name="prior_measured">实测</string>
+    <string name="prior_assumption">假设（未实测）</string>
+    <string name="prior_none">无</string>
+    <string name="nav_planned">已规划 %1$.2f km · 时段先验：%2$s · %3$d 时</string>
 </resources>
