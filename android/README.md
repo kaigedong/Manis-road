@@ -71,6 +71,11 @@ Android 接 PMTiles 需要一个 tile provider，尚未实现。
 - 真机安装后从仪表盘进入「离线底图」，MapLibre 渲染出上海路网并按等级着色，
   平移缩放正常，logcat 无 MapLibre 报错
 - 截图：[`docs/motu/images/maplibre-android.png`](../docs/motu/images/maplibre-android.png)
+- 进入后自动规划一条离线路线（人民广场→陆家嘴）并画在地图上：洋红线 + 绿色起点 +
+  红色终点，相机按折线范围取景。截图：
+  [`docs/motu/images/android-route.png`](../docs/motu/images/android-route.png)
+- 离线图通过 `adb push var/offline/graph-od.bin \
+  /sdcard/Android/data/com.manisroad.app/files/offline/graph.bin` 提供
 
 ## 已验证
 

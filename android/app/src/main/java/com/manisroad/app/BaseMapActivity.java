@@ -3,9 +3,26 @@ package com.manisroad.app;
 import android.app.Activity;
 import android.os.Bundle;
 import android.util.Log;
+import android.widget.Toast;
 
+import com.manisroad.app.core.CoreResult;
+import com.manisroad.app.core.MotuCore;
+import com.manisroad.app.core.OfflineData;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
 import org.maplibre.android.MapLibre;
+import org.maplibre.android.camera.CameraUpdateFactory;
+import org.maplibre.android.geometry.LatLng;
+import org.maplibre.android.geometry.LatLngBounds;
 import org.maplibre.android.maps.MapView;
+import org.maplibre.android.maps.Style;
+import org.maplibre.android.style.sources.GeoJsonSource;
+import org.maplibre.geojson.Feature;
+import org.maplibre.geojson.FeatureCollection;
+import org.maplibre.geojson.LineString;
+import org.maplibre.geojson.Point;
+
 
 /**
  * 离线矢量底图预览：用 MapLibre Native 渲染本机路网。
@@ -31,6 +48,14 @@ public final class BaseMapActivity extends Activity {
             "roads": {
               "type": "geojson",
               "data": "asset://roads.geojson"
+            },
+            "route": {
+              "type": "geojson",
+              "data": { "type": "FeatureCollection", "features": [] }
+            },
+            "endpoints": {
+              "type": "geojson",
+              "data": { "type": "FeatureCollection", "features": [] }
             }
           },
           "layers": [
@@ -60,6 +85,31 @@ public final class BaseMapActivity extends Activity {
                 ],
                 "line-width": 1.6
               }
+            },
+            {
+              "id": "route-casing",
+              "type": "line",
+              "source": "route",
+              "layout": { "line-join": "round", "line-cap": "round" },
+              "paint": { "line-color": "#ffffff", "line-width": 9 }
+            },
+            {
+              "id": "route-line",
+              "type": "line",
+              "source": "route",
+              "layout": { "line-join": "round", "line-cap": "round" },
+              "paint": { "line-color": "#d81b60", "line-width": 6 }
+            },
+            {
+              "id": "endpoints",
+              "type": "circle",
+              "source": "endpoints",
+              "paint": {
+                "circle-radius": 7,
+                "circle-color": ["match", ["get", "kind"], "origin", "#2e7d32", "#c62828"],
+                "circle-stroke-color": "#ffffff",
+                "circle-stroke-width": 2
+              }
             }
           ]
         }
@@ -82,10 +132,7 @@ public final class BaseMapActivity extends Activity {
                     new org.maplibre.android.maps.Style.Builder().fromJson(STYLE_JSON),
                     style -> {
                         Log.i(TAG, "style loaded");
-                        map.animateCamera(
-                                org.maplibre.android.camera.CameraUpdateFactory.newLatLngZoom(
-                                        new org.maplibre.android.geometry.LatLng(31.2304, 121.4737),
-                                        13.0));
+                        planAndDraw(map, style);
                     });
         });
     }
@@ -130,5 +177,90 @@ public final class BaseMapActivity extends Activity {
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
         mapView.onSaveInstanceState(outState);
+    }
+
+    /** 演示用的起终点：人民广场 → 陆家嘴（跨江）。 */
+    private static final double ORIGIN_LAT = 31.2304;
+    private static final double ORIGIN_LON = 121.4737;
+    private static final double DEST_LAT = 31.2397;
+    private static final double DEST_LON = 121.4998;
+
+    /**
+     * 用 JNI 里的离线规划器算一条路线，再交给 MapLibre 画出来。
+     *
+     * <p>规划在后台线程执行（图有几十兆，第一次加载会慢），结果通过
+     * {@code runOnUiThread} 写回 GeoJSON source。</p>
+     */
+    private void planAndDraw(org.maplibre.android.maps.MapLibreMap map, Style style) {
+        new Thread(() -> {
+            try {
+                String graphPath = OfflineData.graphFile(this).getAbsolutePath();
+                CoreResult result = MotuCore.route(graphPath,
+                        ORIGIN_LAT, ORIGIN_LON, DEST_LAT, DEST_LON);
+                JSONObject data = result.objectData();
+                if (!result.ok || data == null) {
+                    runOnUiThread(() -> Toast.makeText(this,
+                            getString(R.string.base_map_route_failed, result.error),
+                            Toast.LENGTH_LONG).show());
+                    return;
+                }
+                JSONArray points = data.optJSONArray("points");
+                if (points == null || points.length() < 2) {
+                    runOnUiThread(() -> Toast.makeText(this, R.string.base_map_route_empty,
+                            Toast.LENGTH_LONG).show());
+                    return;
+                }
+                java.util.List<Point> line = new java.util.ArrayList<>(points.length());
+                for (int index = 0; index < points.length(); index += 1) {
+                    JSONObject point = points.optJSONObject(index);
+                    line.add(Point.fromLngLat(point.optDouble("longitude"),
+                            point.optDouble("latitude")));
+                }
+                FeatureCollection endpoints = FeatureCollection.fromFeatures(new Feature[]{
+                        Feature.fromGeometry(line.get(0),
+                                featureProps("origin")),
+                        Feature.fromGeometry(line.get(line.size() - 1),
+                                featureProps("destination")),
+                });
+                FeatureCollection route =
+                        FeatureCollection.fromFeature(Feature.fromGeometry(LineString.fromLngLats(line)));
+                double meters = data.optDouble("distanceM", 0.0);
+                Log.i(TAG, "route points=" + line.size() + " meters=" + meters);
+                runOnUiThread(() -> {
+                    ((GeoJsonSource) style.getSourceAs("route")).setGeoJson(route);
+                    ((GeoJsonSource) style.getSourceAs("endpoints")).setGeoJson(endpoints);
+                    // 取景必须按实际折线，否则绕行段会被裁出画面。
+                    double south = Double.MAX_VALUE;
+                    double north = -Double.MAX_VALUE;
+                    double west = Double.MAX_VALUE;
+                    double east = -Double.MAX_VALUE;
+                    for (Point point : line) {
+                        south = Math.min(south, point.latitude());
+                        north = Math.max(north, point.latitude());
+                        west = Math.min(west, point.longitude());
+                        east = Math.max(east, point.longitude());
+                    }
+                    map.animateCamera(CameraUpdateFactory.newLatLngBounds(
+                            new LatLngBounds.Builder()
+                                    .include(new LatLng(south, west))
+                                    .include(new LatLng(north, east))
+                                    .build(),
+                            80));
+                    Toast.makeText(this, getString(R.string.base_map_route_ready,
+                            Math.round(meters / 100.0) / 10.0), Toast.LENGTH_SHORT).show();
+                });
+            } catch (RuntimeException error) {
+                Log.w(TAG, "route failed", error);
+                runOnUiThread(() -> Toast.makeText(this,
+                        getString(R.string.base_map_route_failed, error.toString()),
+                        Toast.LENGTH_LONG).show());
+            }
+        }).start();
+    }
+
+    private static com.google.gson.JsonObject featureProps(String kind) {
+        com.google.gson.JsonObject props = new com.google.gson.JsonObject();
+        props.addProperty("kind", kind);
+        return props;
     }
 }

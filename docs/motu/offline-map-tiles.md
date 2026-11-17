@@ -117,6 +117,9 @@ node tools/map-preview/serve.mjs var/offline 8089
 - ✅ **Android 真机渲染已验证**（Honor 设备，2026-11-17）：安装 APK 后从仪表盘进入
   「离线底图」，MapLibre Native 用包内 `assets/roads.geojson` 画出上海路网，按道路
   等级着色，划动可平移缩放，无报错。截图见 [`images/maplibre-android.png`](images/maplibre-android.png)
+- ✅ **路线已画到真机地图上**：`BaseMapActivity` 调 JNI 离线规划（人民广场→陆家嘴），
+  把 `points` 转成 GeoJSON LineString 交给 MapLibre，配起终点圆点、按折线实际范围取景。
+  截图：[`images/android-route.png`](images/android-route.png)
 - 🟡 但 App 内用的是**同源 GeoJSON**（10.5 MB），**不是** `tiles.pmtiles`：MapLibre
   Android 的矢量源只接受 HTTP 模板或离线区包，没有内建 `pmtiles://` 协议。
   PMTiles 在 Web 端由 JS 协议支持；Android 要接需要自建 tile provider

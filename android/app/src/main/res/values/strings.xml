@@ -119,4 +119,7 @@
     <string name="login_payment_note">VIP/支付必须走官方下单与支付渠道；本应用不绕过支付或伪造权益。</string>
     <string name="open_base_map">离线底图（MapLibre）</string>
     <string name="base_map_attribution">© OpenStreetMap contributors (ODbL)</string>
+    <string name="base_map_route_ready">已规划 %.1f km</string>
+    <string name="base_map_route_failed">规划失败：%1$s</string>
+    <string name="base_map_route_empty">规划返回空路线（是否 push 了 graph.bin？）</string>
 </resources>
