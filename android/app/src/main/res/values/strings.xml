@@ -133,4 +133,12 @@
     <string name="nav_running">剩余 %1$.2f km · 约 %2$d 分钟 · %3$d km/h</string>
     <string name="nav_arrived">已到达终点（%1$.2f km）</string>
     <string name="nav_need_route">路线还没算出来，稍等再试</string>
+    <string name="nav_waiting_fix">等待 GPS 定位…</string>
+    <string name="nav_stopped">导航已停止</string>
+    <string name="nav_no_permission">没有定位权限，无法导航</string>
+    <string name="nav_no_gps">定位服务不可用：%1$s</string>
+    <string name="nav_replanned">已重算路线（第 %1$d 次，%2$d ms）</string>
+    <string name="nav_next">前方 %1$d m：%2$s</string>
+    <string name="nav_last_leg">最后一段，沿当前道路直行</string>
+    <string name="nav_offset">偏离路线 %1$d m</string>
 </resources>

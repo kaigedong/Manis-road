@@ -150,18 +150,10 @@ public final class BaseMapActivity extends Activity {
         """;
 
     private MapView mapView;
-    /** 导航态：沿路线模拟前进（真实 GPS 接入前先用固定速度推进）。 */
     private org.maplibre.android.maps.MapLibreMap navMap;
     private Style navStyle;
-    private final java.util.List<Point> navPoints = new java.util.ArrayList<>();
-    private final java.util.List<Double> navCumulative = new java.util.ArrayList<>();
-    private double navTravelled;
-    private boolean navigating;
-    private final android.os.Handler navHandler =
-            new android.os.Handler(android.os.Looper.getMainLooper());
     /** 25 km/h，城区摩托车的常态速度。 */
     private static final double NAV_SPEED_MPS = 25_000.0 / 3600.0;
-    private static final long NAV_TICK_MS = 500;
 
     /** 已加载的电子眼（原始 JSON），点击时找最近的一个。 */
     private final java.util.List<JSONObject> cameraPoints = new java.util.ArrayList<>();
@@ -258,6 +250,8 @@ public final class BaseMapActivity extends Activity {
                                 featureProps("destination")),
                 });
                 currentRoutePoints = points;
+                routeSteps = data.optJSONArray("steps");
+                routeTotalM = data.optDouble("distanceM", 0.0);
                 FeatureCollection route =
                         FeatureCollection.fromFeature(Feature.fromGeometry(LineString.fromLngLats(line)));
                 double meters = data.optDouble("distanceM", 0.0);
@@ -520,104 +514,263 @@ public final class BaseMapActivity extends Activity {
         };
     }
 
+    // ---- 导航：GPS 驱动 ----
+
+    private android.location.LocationManager locationManager;
+    private android.location.LocationListener locationListener;
+    /** 路线里的转向指令（来自规划结果的 steps）。 */
+    private JSONArray routeSteps;
+    private double routeTotalM;
+    private long lastReplanAtMs;
+    private int replanCount;
+    private boolean navigating;
+    private boolean waitingForFix;
+
+    private static final int REQUEST_LOCATION = 42;
+    /** 偏航阈值，与 ReplanPolicy.deviation_m 一致。 */
+    private static final double DEVIATION_LIMIT_M = 50.0;
+    /** 偏航重算的最小间隔（政策里 deviation_cooldown = 3 s）。 */
+    private static final long REPLAN_COOLDOWN_MS = 3000;
+
+    private boolean ensureLocationPermission() {
+        if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            return true;
+        }
+        requestPermissions(new String[]{
+                android.Manifest.permission.ACCESS_FINE_LOCATION,
+                android.Manifest.permission.ACCESS_COARSE_LOCATION,
+        }, REQUEST_LOCATION);
+        return false;
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                                           int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_LOCATION
+                && grantResults.length > 0
+                && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            toggleNavigation();
+        } else if (requestCode == REQUEST_LOCATION) {
+            Toast.makeText(this, R.string.nav_no_permission, Toast.LENGTH_LONG).show();
+        }
+    }
+
     private void toggleNavigation() {
         if (navigating) {
-            navigating = false;
-            navHandler.removeCallbacksAndMessages(null);
-            ((android.widget.Button) findViewById(R.id.button_nav_start))
-                    .setText(R.string.nav_start);
+            stopNavigation(getString(R.string.nav_stopped));
             return;
         }
         if (currentRoutePoints == null || currentRoutePoints.length() < 2) {
             Toast.makeText(this, R.string.nav_need_route, Toast.LENGTH_SHORT).show();
             return;
         }
-        navPoints.clear();
-        navCumulative.clear();
+        if (!ensureLocationPermission()) {
+            return;
+        }
+        locationManager = (android.location.LocationManager)
+                getSystemService(android.content.Context.LOCATION_SERVICE);
+        if (locationManager == null) {
+            Toast.makeText(this, R.string.nav_no_gps, Toast.LENGTH_LONG).show();
+            return;
+        }
+        locationListener = this::onLocationChanged;
+        try {
+            locationManager.requestLocationUpdates(
+                    android.location.LocationManager.GPS_PROVIDER, 1000L, 2.0f, locationListener,
+                    android.os.Looper.getMainLooper());
+            locationManager.requestLocationUpdates(
+                    android.location.LocationManager.NETWORK_PROVIDER, 2000L, 5.0f,
+                    locationListener, android.os.Looper.getMainLooper());
+        } catch (SecurityException | IllegalArgumentException error) {
+            Toast.makeText(this, getString(R.string.nav_no_gps, error.toString()),
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        navigating = true;
+        waitingForFix = true;
+        replanCount = 0;
+        lastReplanAtMs = 0L;
+        findViewById(R.id.text_replan_result).setVisibility(android.view.View.GONE);
+        ((android.widget.Button) findViewById(R.id.button_nav_start))
+                .setText(R.string.nav_pause);
+        ((android.widget.TextView) findViewById(R.id.text_nav_status))
+                .setText(R.string.nav_waiting_fix);
+    }
+
+    private void stopNavigation(String message) {
+        navigating = false;
+        if (locationManager != null && locationListener != null) {
+            try {
+                locationManager.removeUpdates(locationListener);
+            } catch (SecurityException ignored) {
+                // 权限被撤销时 removeUpdates 也会抛，这里没有补救动作。
+            }
+        }
+        ((android.widget.Button) findViewById(R.id.button_nav_start))
+                .setText(R.string.nav_start);
+        ((android.widget.TextView) findViewById(R.id.text_nav_status)).setText(message);
+    }
+
+    /** 每来一次定位：移动蓝点、判断偏航、必要时重算、更新剩余里程。 */
+    private void onLocationChanged(android.location.Location location) {
+        waitingForFix = false;
+        updateMe(location.getLongitude(), location.getLatitude());
+        if (navMap != null && navigating) {
+            navMap.animateCamera(org.maplibre.android.camera.CameraUpdateFactory
+                    .newLatLngZoom(new LatLng(location.getLatitude(), location.getLongitude()),
+                            16.0), 500);
+        }
+        if (!navigating || currentRoutePoints == null) {
+            return;
+        }
+
+        CoreResult deviationResult = MotuCore.deviation(
+                currentRoutePoints, location.getLatitude(), location.getLongitude());
+        double deviation = deviationResult.objectData() == null
+                ? 0.0
+                : deviationResult.objectData().optDouble("distanceM", 0.0);
+
+        long now = System.currentTimeMillis();
+        CoreResult decision = MotuCore.replanDecision(
+                deviation, 0.0, 1.0,
+                lastReplanAtMs == 0L ? -1.0 : now - lastReplanAtMs, false);
+        boolean replan = decision.objectData() != null
+                && decision.objectData().optBoolean("replan");
+        if (replan && now - lastReplanAtMs >= REPLAN_COOLDOWN_MS) {
+            replanFrom(location.getLatitude(), location.getLongitude());
+        }
+        renderProgress(location.getLatitude(), location.getLongitude(), deviation);
+    }
+
+    private void replanFrom(double latitude, double longitude) {
+        String graphPath = OfflineData.graphFile(this).getAbsolutePath();
+        long began = System.nanoTime();
+        CoreResult result = MotuCore.route(graphPath, latitude, longitude, DEST_LAT, DEST_LON);
+        long elapsedMs = (System.nanoTime() - began) / 1_000_000;
+        JSONObject data = result.objectData();
+        if (data == null || data.optJSONArray("points") == null) {
+            return;
+        }
+        currentRoutePoints = data.optJSONArray("points");
+        routeSteps = data.optJSONArray("steps");
+        routeTotalM = data.optDouble("distanceM", 0.0);
+        lastReplanAtMs = System.currentTimeMillis();
+        replanCount += 1;
+        drawRoute();
+        Toast.makeText(this, getString(R.string.nav_replanned, replanCount, elapsedMs),
+                Toast.LENGTH_SHORT).show();
+    }
+
+    /** 把当前路线重新画到地图上（首次规划与重算共用）。 */
+    private void drawRoute() {
+        if (navStyle == null || currentRoutePoints == null) {
+            return;
+        }
+        java.util.List<Point> line = new java.util.ArrayList<>();
+        for (int index = 0; index < currentRoutePoints.length(); index += 1) {
+            JSONObject point = currentRoutePoints.optJSONObject(index);
+            if (point != null) {
+                line.add(Point.fromLngLat(point.optDouble("longitude"),
+                        point.optDouble("latitude")));
+            }
+        }
+        if (line.size() < 2) {
+            return;
+        }
+        ((GeoJsonSource) navStyle.getSourceAs("route")).setGeoJson(
+                FeatureCollection.fromFeature(
+                        Feature.fromGeometry(LineString.fromLngLats(line))));
+        ((GeoJsonSource) navStyle.getSourceAs("endpoints")).setGeoJson(
+                FeatureCollection.fromFeatures(new Feature[]{
+                        Feature.fromGeometry(line.get(0), featureProps("origin")),
+                        Feature.fromGeometry(line.get(line.size() - 1),
+                                featureProps("destination")),
+                }));
+    }
+
+    private void updateMe(double longitude, double latitude) {
+        if (navStyle == null) {
+            return;
+        }
+        ((GeoJsonSource) navStyle.getSourceAs("me")).setGeoJson(
+                FeatureCollection.fromFeature(Feature.fromGeometry(
+                        Point.fromLngLat(longitude, latitude), featureProps("me"))));
+    }
+
+    /** 剩余里程、预计时间与下一条转向指令。 */
+    private void renderProgress(double latitude, double longitude, double deviation) {
+        if (currentRoutePoints == null) {
+            return;
+        }
+        int nearest = 0;
+        double best = Double.MAX_VALUE;
+        double remaining = 0.0;
         for (int index = 0; index < currentRoutePoints.length(); index += 1) {
             JSONObject point = currentRoutePoints.optJSONObject(index);
             if (point == null) {
                 continue;
             }
-            navPoints.add(Point.fromLngLat(point.optDouble("longitude"),
-                    point.optDouble("latitude")));
+            double distance = distanceMeters(latitude, longitude,
+                    point.optDouble("latitude"), point.optDouble("longitude"));
+            if (distance < best) {
+                best = distance;
+                nearest = index;
+            }
         }
-        if (navPoints.size() < 2) {
-            return;
+        for (int index = nearest; index + 1 < currentRoutePoints.length(); index += 1) {
+            JSONObject a = currentRoutePoints.optJSONObject(index);
+            JSONObject b = currentRoutePoints.optJSONObject(index + 1);
+            if (a == null || b == null) {
+                continue;
+            }
+            remaining += distanceMeters(a.optDouble("latitude"), a.optDouble("longitude"),
+                    b.optDouble("latitude"), b.optDouble("longitude"));
         }
-        double total = 0.0;
-        navCumulative.add(0.0);
-        for (int index = 1; index < navPoints.size(); index += 1) {
-            total += distanceMeters(navPoints.get(index - 1).latitude(),
-                    navPoints.get(index - 1).longitude(),
-                    navPoints.get(index).latitude(), navPoints.get(index).longitude());
-            navCumulative.add(total);
+
+        StringBuilder status = new StringBuilder();
+        if (remaining <= 30.0) {
+            status.append(getString(R.string.nav_arrived, routeTotalM / 1000.0));
+        } else {
+            int minutes = (int) Math.round(remaining / NAV_SPEED_MPS / 60.0);
+            status.append(getString(R.string.nav_running,
+                    remaining / 1000.0, minutes, (int) Math.round(NAV_SPEED_MPS * 3.6)));
+            status.append('\n').append(nextInstruction(remaining, deviation));
         }
-        navTravelled = 0.0;
-        navigating = true;
-        // 进入导航态后把调试面板收起来，屏幕留给地图。
-        findViewById(R.id.text_replan_result).setVisibility(android.view.View.GONE);
-        ((android.widget.Button) findViewById(R.id.button_nav_start))
-                .setText(R.string.nav_pause);
-        navHandler.removeCallbacksAndMessages(null);
-        navHandler.post(navTick);
+        ((android.widget.TextView) findViewById(R.id.text_nav_status)).setText(status);
     }
 
-    private final Runnable navTick = this::stepNavigation;
-
-    /** 沿折线推进一步：更新蓝点、剩余里程与相机。 */
-    private void stepNavigation() {
-        if (!navigating || navPoints.size() < 2) {
-            return;
+    /** 用「总长 − 剩余」反推已走的距离，再找对应的那条转向指令。 */
+    private String nextInstruction(double remaining, double deviation) {
+        if (routeSteps == null || routeSteps.length() == 0) {
+            return getString(R.string.nav_offset, Math.round(deviation));
         }
-        double total = navCumulative.get(navCumulative.size() - 1);
-        navTravelled = Math.min(total, navTravelled + NAV_SPEED_MPS * NAV_TICK_MS / 1000.0);
-
-        int segment = 1;
-        while (segment < navCumulative.size() - 1 && navCumulative.get(segment) < navTravelled) {
-            segment += 1;
+        double travelled = routeTotalM - remaining;
+        double accumulated = 0.0;
+        for (int index = 0; index < routeSteps.length(); index += 1) {
+            JSONObject step = routeSteps.optJSONObject(index);
+            if (step == null) {
+                continue;
+            }
+            accumulated += step.optDouble("distanceM", 0.0);
+            if (travelled < accumulated) {
+                double before = accumulated - step.optDouble("distanceM", 0.0);
+                long ahead = Math.round(accumulated - travelled);
+                if (ahead <= 30) {
+                    return step.optString("instruction");
+                }
+                return getString(R.string.nav_next, ahead, step.optString("instruction"));
+            }
         }
-        double segmentStart = navCumulative.get(segment - 1);
-        double segmentLength = navCumulative.get(segment) - segmentStart;
-        double ratio = segmentLength <= 0.0 ? 0.0 : (navTravelled - segmentStart) / segmentLength;
-        Point from = navPoints.get(segment - 1);
-        Point to = navPoints.get(segment);
-        double lat = from.latitude() + (to.latitude() - from.latitude()) * ratio;
-        double lon = from.longitude() + (to.longitude() - from.longitude()) * ratio;
-
-        if (navStyle != null) {
-            com.google.gson.JsonObject props = new com.google.gson.JsonObject();
-            props.addProperty("kind", "me");
-            ((GeoJsonSource) navStyle.getSourceAs("me")).setGeoJson(FeatureCollection.fromFeature(
-                    Feature.fromGeometry(Point.fromLngLat(lon, lat), props)));
-        }
-        if (navMap != null) {
-            navMap.animateCamera(
-                    org.maplibre.android.camera.CameraUpdateFactory
-                            .newLatLngZoom(new LatLng(lat, lon), 16.0),
-                    300);
-        }
-
-        double remaining = total - navTravelled;
-        android.widget.TextView status = findViewById(R.id.text_nav_status);
-        if (remaining <= 5.0) {
-            navigating = false;
-            navHandler.removeCallbacksAndMessages(null);
-            ((android.widget.Button) findViewById(R.id.button_nav_start))
-                    .setText(R.string.nav_start);
-            status.setText(getString(R.string.nav_arrived, total / 1000.0));
-            return;
-        }
-        int minutes = (int) Math.round(remaining / NAV_SPEED_MPS / 60.0);
-        status.setText(getString(R.string.nav_running,
-                remaining / 1000.0, minutes, (int) Math.round(NAV_SPEED_MPS * 3.6)));
-        navHandler.postDelayed(navTick, NAV_TICK_MS);
+        return getString(R.string.nav_last_leg);
     }
+
+
 
     @Override
     protected void onPause() {
         super.onPause();
-        navHandler.removeCallbacksAndMessages(null);
         mapView.onPause();
     }
 
@@ -630,7 +783,13 @@ public final class BaseMapActivity extends Activity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        navHandler.removeCallbacksAndMessages(null);
+        if (locationManager != null && locationListener != null) {
+            try {
+                locationManager.removeUpdates(locationListener);
+            } catch (SecurityException ignored) {
+                // 进程要退了，没权限也没关系。
+            }
+        }
         mapView.onDestroy();
     }
 

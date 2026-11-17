@@ -78,9 +78,12 @@ Android 接 PMTiles 需要一个 tile provider，尚未实现。
   2,399 个点位按类型着色（禁行/非机动车道/不戴头盔=红，闯红灯/超速/车道违法/压线=橙，
   其余=灰），点击弹「最近电子眼 + 类型 + 距离」（300 m 内命中）。
   截图：[`docs/motu/images/android-cameras.png`](../docs/motu/images/android-cameras.png)
-- 导航态：底部「开始导航」→ 蓝点沿路线以 25 km/h 前进、相机跟随、显示剩余里程与时间
-  （位置是模拟推进，真实 GPS 未接）。截图：
-  [`docs/motu/images/android-navigation.png`](../docs/motu/images/android-navigation.png)
+- 导航态：`LocationManager`（GPS 1 s/2 m + 网络 2 s/5 m）驱动，蓝点跟随真实定位、
+  相机跟随、显示剩余里程/时间/下一条转向指令
+- 偏航 >50 m 且距上次重算 ≥3 s 自动重算并重画路线
+- 验证：模拟器注入 GPS（`adb emu geo fix`）沿路线行走，再横向推开 220 m，
+  弹出「已重算路线（第 1 次，89 ms）」「第 3 次，86 ms」。截图：
+  [`docs/motu/images/android-gps-replan.png`](../docs/motu/images/android-gps-replan.png)
 - 控件都放在地图容器之外：MapView 的 SurfaceView 会吞掉同级控件的点击，
   曾经「点按钮地图反而平移」
 - 离线图通过 `adb push var/offline/graph-od.bin \
