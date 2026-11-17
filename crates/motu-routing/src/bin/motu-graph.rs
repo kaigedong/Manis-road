@@ -91,11 +91,21 @@ fn run() -> Result<(), String> {
             let mut hour: Option<u8> = None;
             let mut prior_path: Option<String> = None;
             let mut avoid_path: Option<String> = None;
+            let mut cameras_path: Option<String> = None;
+            let mut camera_scale = 1.0;
+            let mut camera_radius = motu_routing::risk::DEFAULT_CAMERA_RADIUS_M;
+            let mut zone_factor = motu_routing::risk::DEFAULT_ZONE_FACTOR;
+            let mut count_only = false;
             while let Some(flag) = args.next() {
                 match flag.as_str() {
                     "--hour" => hour = Some(parse_hour(args.next())?),
                     "--prior" => prior_path = args.next(),
                     "--avoid" => avoid_path = args.next(),
+                    "--cameras" => cameras_path = args.next(),
+                    "--camera-radius" => camera_radius = parse_f64(args.next(), "--camera-radius")?,
+                    "--zone-factor" => zone_factor = parse_f64(args.next(), "--zone-factor")?,
+                    "--count-only" => count_only = true,
+                    "--camera-scale" => camera_scale = parse_f64(args.next(), "--camera-scale")?,
                     other => return Err(format!("unknown flag {other}")),
                 }
             }
@@ -103,6 +113,25 @@ fn run() -> Result<(), String> {
                 Some(path) => load_avoid(path)?,
                 None => Vec::new(),
             };
+            let mut cameras = match cameras_path.as_deref() {
+                Some(path) => load_cameras(path)?,
+                None => Vec::new(),
+            };
+            if count_only {
+                for camera in &mut cameras {
+                    camera.seconds = 0.0;
+                }
+            } else if (camera_scale - 1.0).abs() > 1e-9 {
+                for camera in &mut cameras {
+                    camera.seconds *= camera_scale;
+                }
+            }
+            let risk = motu_routing::risk::RiskModel::new(
+                &cameras,
+                camera_radius,
+                &avoid,
+                zone_factor,
+            );
             let prior = match prior_path.as_deref() {
                 Some(path) => Some(
                     TrafficPrior::load(Path::new(path)).map_err(|error| error.to_string())?,
@@ -112,7 +141,7 @@ fn run() -> Result<(), String> {
             let context = RouteContext {
                 prior: prior.as_ref(),
                 hour: hour.unwrap_or(12),
-                avoid: &avoid,
+                risk: Some(&risk),
             };
             let graph = RoadGraph::load(Path::new(&input)).map_err(|error| error.to_string())?;
             let plan = graph
@@ -128,6 +157,40 @@ fn run() -> Result<(), String> {
             let json = serde_json::to_string_pretty(&plan).map_err(|error| error.to_string())?;
             println!("{json}");
         }
+        "risk-probe" => {
+            let cameras_path = args.next().ok_or_else(usage)?;
+            let from = parse_point(&args.next().ok_or_else(usage)?)?;
+            let to = parse_point(&args.next().ok_or_else(usage)?)?;
+            let cameras = load_cameras(&cameras_path)?;
+            let risk = motu_routing::risk::RiskModel::new(
+                &cameras,
+                motu_routing::risk::DEFAULT_CAMERA_RADIUS_M,
+                &[],
+                motu_routing::risk::DEFAULT_ZONE_FACTOR,
+            );
+            let base = 30.0_f64;
+            let penalty = risk.edge_penalty_s(from, to, base);
+            let nearest = cameras
+                .iter()
+                .map(|camera| {
+                    (
+                        motu_routing::graph::haversine_m(
+                            from.latitude, from.longitude,
+                            camera.point.latitude, camera.point.longitude,
+                        ),
+                        camera.seconds,
+                    )
+                })
+                .fold((f64::MAX, 0.0), |acc, item| if item.0 < acc.0 { item } else { acc });
+            println!(
+                "cameras={} nearest={:.0}m weight={:.0}s radius={:.0}m penalty={:.1}s",
+                risk.cameras.len(),
+                nearest.0,
+                nearest.1,
+                risk.cameras.radius_m(),
+                penalty
+            );
+        }
         "metrics" => {
             let input = args.next().ok_or_else(usage)?;
             let origin = parse_point(&args.next().ok_or_else(usage)?)?;
@@ -136,6 +199,11 @@ fn run() -> Result<(), String> {
             let mut hour: Option<u8> = None;
             let mut prior_path: Option<String> = None;
             let mut avoid_path: Option<String> = None;
+            let mut cameras_path: Option<String> = None;
+            let mut camera_scale = 1.0;
+            let mut camera_radius = motu_routing::risk::DEFAULT_CAMERA_RADIUS_M;
+            let mut zone_factor = motu_routing::risk::DEFAULT_ZONE_FACTOR;
+            let mut count_only = false;
             let mut profile = RouteProfile::motorcycle_default();
             while let Some(flag) = args.next() {
                 match flag.as_str() {
@@ -148,6 +216,11 @@ fn run() -> Result<(), String> {
                     "--hour" => hour = Some(parse_hour(args.next())?),
                     "--prior" => prior_path = args.next(),
                     "--avoid" => avoid_path = args.next(),
+                    "--cameras" => cameras_path = args.next(),
+                    "--camera-radius" => camera_radius = parse_f64(args.next(), "--camera-radius")?,
+                    "--zone-factor" => zone_factor = parse_f64(args.next(), "--zone-factor")?,
+                    "--count-only" => count_only = true,
+                    "--camera-scale" => camera_scale = parse_f64(args.next(), "--camera-scale")?,
                     other => return Err(format!("unknown flag {other}")),
                 }
             }
@@ -165,10 +238,29 @@ fn run() -> Result<(), String> {
                 Some(path) => load_avoid(path)?,
                 None => Vec::new(),
             };
+            let mut cameras = match cameras_path.as_deref() {
+                Some(path) => load_cameras(path)?,
+                None => Vec::new(),
+            };
+            if count_only {
+                for camera in &mut cameras {
+                    camera.seconds = 0.0;
+                }
+            } else if (camera_scale - 1.0).abs() > 1e-9 {
+                for camera in &mut cameras {
+                    camera.seconds *= camera_scale;
+                }
+            }
+            let risk = motu_routing::risk::RiskModel::new(
+                &cameras,
+                camera_radius,
+                &avoid,
+                zone_factor,
+            );
             let context = RouteContext {
                 prior: prior.as_ref(),
                 hour: hour.unwrap_or(12),
-                avoid: &avoid,
+                risk: Some(&risk),
             };
             let graph = RoadGraph::load(Path::new(&input)).map_err(|error| error.to_string())?;
             let (plan, metrics) = graph
@@ -222,6 +314,51 @@ fn neutral_profile() -> RouteProfile {
 }
 
 /// `[[lat, lon], [lat, lon], ...]` — one polygon per element.
+fn parse_f64(value: Option<String>, flag: &str) -> Result<f64, String> {
+    let raw = value.ok_or_else(|| format!("{flag} needs a value"))?;
+    raw.parse()
+        .map_err(|error| format!("bad {flag} {raw}: {error}"))
+}
+
+/// `[{ "position": {"latitude", "longitude"}, "tabTypes": [1] }, ...]`
+/// or the same wrapped in `{ "cameras": [...] }`.
+fn load_cameras(path: &str) -> Result<Vec<motu_routing::risk::CameraRisk>, String> {
+    let text = std::fs::read_to_string(path).map_err(|error| format!("{path}: {error}"))?;
+    let raw: serde_json::Value =
+        serde_json::from_str(&text).map_err(|error| format!("{path}: {error}"))?;
+    let array = raw
+        .get("cameras")
+        .and_then(serde_json::Value::as_array)
+        .or_else(|| raw.as_array())
+        .ok_or_else(|| format!("{path}: expected an array of cameras"))?;
+    let mut out = Vec::with_capacity(array.len());
+    for item in array {
+        let position = item.get("position");
+        let lat = position
+            .and_then(|value| value.get("latitude"))
+            .and_then(serde_json::Value::as_f64);
+        let lon = position
+            .and_then(|value| value.get("longitude"))
+            .and_then(serde_json::Value::as_f64);
+        let (Some(lat), Some(lon)) = (lat, lon) else {
+            continue;
+        };
+        let tab_type = item
+            .get("tabTypes")
+            .and_then(serde_json::Value::as_array)
+            .and_then(|types| types.first())
+            .and_then(serde_json::Value::as_u64)
+            .and_then(|value| u8::try_from(value).ok())
+            .unwrap_or(0);
+        out.push(motu_routing::risk::CameraRisk {
+            point: LatLng::new(lat, lon),
+            seconds: motu_routing::risk::seconds_for_tab_type(tab_type),
+            tab_type,
+        });
+    }
+    Ok(out)
+}
+
 fn load_avoid(path: &str) -> Result<Vec<Vec<LatLng>>, String> {
     let bytes = std::fs::read(path).map_err(|error| format!("{path}: {error}"))?;
     let raw: Vec<Vec<[f64; 2]>> =

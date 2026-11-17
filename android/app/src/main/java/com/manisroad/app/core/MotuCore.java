@@ -66,7 +66,8 @@ public final class MotuCore {
     private static native String nativeRouteWithContext(String graphPath, double originLat,
                                                         double originLon, double destinationLat,
                                                         double destinationLon, String priorPath,
-                                                        int hour, String avoidJson);
+                                                        int hour, String zoneJson,
+                                                        String camerasJson);
 
     private static native String nativeRouteAudit(String pointsJson, String areasJson,
                                                   String camerasJson, double bufferMeters);
@@ -230,9 +231,10 @@ public final class MotuCore {
      */
     public static CoreResult routeWithContext(String graphPath, double originLat, double originLon,
                                               double destinationLat, double destinationLon,
-                                              String priorPath, int hour, String avoidJson) {
+                                              String priorPath, int hour, String zoneJson,
+                                              String camerasJson) {
         return CoreResult.parse(nativeRouteWithContext(graphPath, originLat, originLon,
-                destinationLat, destinationLon, priorPath, hour, avoidJson));
+                destinationLat, destinationLon, priorPath, hour, zoneJson, camerasJson));
     }
 
     /** 当前位置到折线的距离（米），用于判断偏航。 */

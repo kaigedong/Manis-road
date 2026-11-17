@@ -85,6 +85,8 @@ Android 接 PMTiles 需要一个 tile provider，尚未实现。
   截图：[`docs/motu/images/android-cameras.png`](../docs/motu/images/android-cameras.png)
 - 导航态：`LocationManager`（GPS 1 s/2 m + 网络 2 s/5 m）驱动，蓝点跟随真实定位、
   相机跟随、显示剩余里程/时间/下一条转向指令
+- 规划走三层模型：静态画像 + 时段先验（`traffic-prior.json`）+ 禁摩区域（`avoid.json`），
+  状态栏如实标注先验来源（实测 / 假设 / 无）与小时
 - 偏航 >50 m 且距上次重算 ≥3 s 自动重算并重画路线
 - 验证：模拟器注入 GPS（`adb emu geo fix`）沿路线行走，再横向推开 220 m，
   弹出「已重算路线（第 1 次，89 ms）」「第 3 次，86 ms」。截图：

@@ -524,22 +524,40 @@ pub extern "system" fn Java_com_manisroad_app_core_MotuCore_nativeRouteWithConte
     destination_lon: jdouble,
     prior_path: JString,
     hour: jint,
-    avoid_json: JString,
+    zone_json: JString,
+    cameras_json: JString,
 ) -> jstring {
     let result: Result<String, String> = (|| {
         let graph_path = string_arg(&mut env, &graph_path)?;
         let prior_path = string_arg(&mut env, &prior_path)?;
-        let avoid_json = string_arg(&mut env, &avoid_json)?;
+        let zone_json = string_arg(&mut env, &zone_json)?;
+        let cameras_json = string_arg(&mut env, &cameras_json)?;
         let origin = LatLng::new(origin_lat, origin_lon);
         let destination = LatLng::new(destination_lat, destination_lon);
         let hour = u8::try_from(hour).map_err(|_| format!("bad hour {hour}"))?;
         if hour > 23 {
             return Err(format!("hour must be 0..=23, got {hour}"));
         }
-        let avoid: Vec<Vec<LatLng>> = if avoid_json.trim().is_empty() {
+        let zones: Vec<Vec<LatLng>> = if zone_json.trim().is_empty() {
             Vec::new()
         } else {
-            parse_json(&avoid_json, "avoid")?
+            parse_json(&zone_json, "zones")?
+        };
+        // 电子眼：换算成秒，和时段先验一起进代价。
+        let cameras: Vec<motu_routing::risk::CameraRisk> = if cameras_json.trim().is_empty() {
+            Vec::new()
+        } else {
+            let raw: Vec<TrafficCamera> = parse_json(&cameras_json, "cameras")?;
+            raw.iter()
+                .map(|camera| {
+                    let tab_type = camera.tab_types.first().map_or(0, |kind| (*kind).id());
+                    motu_routing::risk::CameraRisk {
+                        point: camera.position,
+                        seconds: motu_routing::risk::seconds_for_tab_type(tab_type),
+                        tab_type,
+                    }
+                })
+                .collect()
         };
 
         with_state(|state| {
@@ -550,10 +568,16 @@ pub extern "system" fn Java_com_manisroad_app_core_MotuCore_nativeRouteWithConte
             } else {
                 Some(prior_for(state, &prior_path)?.clone())
             };
+            let risk = motu_routing::risk::RiskModel::new(
+                &cameras,
+                motu_routing::risk::DEFAULT_CAMERA_RADIUS_M,
+                &zones,
+                motu_routing::risk::DEFAULT_ZONE_FACTOR,
+            );
             let context = motu_routing::RouteContext {
                 prior: prior_owned.as_ref(),
                 hour,
-                avoid: &avoid,
+                risk: Some(&risk),
             };
             let graph = graph_for(state, &graph_path)?;
             let (plan, metrics) = graph
@@ -568,10 +592,11 @@ pub extern "system" fn Java_com_manisroad_app_core_MotuCore_nativeRouteWithConte
                 "metrics": metrics,
                 "priorSource": source,
                 "hour": hour,
-                "avoidAreas": avoid.len(),
+                "riskZones": zones.len(),
+                "cameras": cameras.len(),
             }))
         })
-        .map(|value| ok(value))
+        .map(ok)
     })();
     jstring_out(&mut env, result.unwrap_or_else(err))
 }
@@ -614,17 +639,16 @@ fn route_avoiding_json(
         // very high time penalty. Never return a route that cannot reduce the
         // known hits.
         let hard = CameraDeterrent::build_hard(graph, &points, radius);
-        let candidate = match graph.route_with(origin, destination, Some(&hard)) {
-            Ok(candidate) => candidate,
-            Err(_) => {
-                let soft = CameraDeterrent::build(graph, &points, radius, 50.0);
-                match graph.route_with(origin, destination, Some(&soft)) {
-                    Ok(candidate) => candidate,
-                    Err(error) => {
-                        return Err(format!(
-                            "强制避开电子眼后无可行路线（{error}）；可减小半径或取消勾选"
-                        ));
-                    }
+        let candidate = if let Ok(candidate) = graph.route_with(origin, destination, Some(&hard)) {
+            candidate
+        } else {
+            let soft = CameraDeterrent::build(graph, &points, radius, 50.0);
+            match graph.route_with(origin, destination, Some(&soft)) {
+                Ok(candidate) => candidate,
+                Err(error) => {
+                    return Err(format!(
+                        "强制避开电子眼后无可行路线（{error}）；可减小半径或取消勾选"
+                    ));
                 }
             }
         };

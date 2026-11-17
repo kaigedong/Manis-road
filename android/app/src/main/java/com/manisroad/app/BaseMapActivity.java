@@ -648,10 +648,20 @@ public final class BaseMapActivity extends Activity {
                 avoidJson = text;
             }
         }
+        // 电子眼：按类型折算成秒参与代价，这是「穿过限行区但不被拍」的核心。
+        String camerasJson = "";
+        java.io.File cameras = OfflineData.camerasFile(this);
+        if (cameras.isFile()) {
+            String text = OfflineData.readText(cameras);
+            if (text != null && !text.trim().isEmpty()) {
+                camerasJson = text;
+            }
+        }
         priorHour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY);
         CoreResult result = MotuCore.routeWithContext(
                 OfflineData.graphFile(this).getAbsolutePath(),
-                originLat, originLon, DEST_LAT, DEST_LON, priorPath, priorHour, avoidJson);
+                originLat, originLon, DEST_LAT, DEST_LON, priorPath, priorHour, avoidJson,
+                camerasJson);
         JSONObject data = result.objectData();
         if (!result.ok || data == null) {
             Log.w(TAG, "routeWithContext failed: " + result.error

@@ -410,7 +410,12 @@ fn forbidden_area_is_avoided_during_planning() {
     );
 
     let closed = RouteContext {
-        avoid: &ban,
+        risk: Some(&motu_routing::risk::RiskModel::new(
+            &[],
+            motu_routing::risk::DEFAULT_CAMERA_RADIUS_M,
+            &ban,
+            8.0,
+        )),
         ..RouteContext::default()
     };
     let (detour, _) = graph

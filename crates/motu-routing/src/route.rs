@@ -61,10 +61,9 @@ pub struct RouteContext<'a> {
     pub prior: Option<&'a TrafficPrior>,
     /// Local hour, 0..=23. Only read when `prior` is set.
     pub hour: u8,
-    /// Motorcycle-banned polygons (closed, WGS-84). Nodes inside are never
-    /// entered, so a forbidden area is a planning constraint rather than a
-    /// post-hoc audit of a route that already drove through it.
-    pub avoid: &'a [Vec<LatLng>],
+    /// Camera and restricted-zone risk. Zones raise the cost of the roads inside
+    /// them; they never make a road impassable — riding through is the point.
+    pub risk: Option<&'a crate::risk::RiskModel>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -235,6 +234,19 @@ impl RoadGraph {
         }
 
         let mut metrics = measure_edges(self, &route_edges);
+        if let Some(risk) = context.risk {
+            let (count, share) =
+                crate::risk::route_risk_report(&points, &risk.cameras, &risk.zones, 30.0);
+            let km = metrics.distance_m / 1000.0;
+            metrics.cameras_on_route = Some(count);
+            #[allow(
+                clippy::cast_precision_loss,
+                reason = "camera count per route is a small integer"
+            )]
+            let count_f = count as f64;
+            metrics.cameras_per_km = if km > 0.0 { Some(count_f / km) } else { None };
+            metrics.restricted_share = Some(share);
+        }
         metrics.distance_m = distance_m;
         metrics.duration_s = duration_s;
 
@@ -249,35 +261,6 @@ impl RoadGraph {
         ))
     }
 
-    /// Nodes inside any forbidden polygon.
-    ///
-    /// A linear scan per polygon with a bounding-box reject keeps this cheap
-    /// enough to run per re-plan even on the 124k-node city graph.
-    fn blocked_nodes(&self, polygons: &[Vec<LatLng>]) -> Vec<bool> {
-        let mut blocked = vec![false; self.nodes.len()];
-        for polygon in polygons {
-            if polygon.len() < 3 {
-                continue;
-            }
-            let (mut south, mut north) = (f64::MAX, f64::MIN);
-            let (mut west, mut east) = (f64::MAX, f64::MIN);
-            for point in polygon {
-                south = south.min(point.latitude);
-                north = north.max(point.latitude);
-                west = west.min(point.longitude);
-                east = east.max(point.longitude);
-            }
-            for (index, node) in self.nodes.iter().enumerate() {
-                if node.lat < south || node.lat > north || node.lon < west || node.lon > east {
-                    continue;
-                }
-                if motu_core::geo::point_in_polygon(node.position(), polygon) {
-                    blocked[index] = true;
-                }
-            }
-        }
-        blocked
-    }
 
     /// A* over directed edges.
     ///
@@ -297,7 +280,6 @@ impl RoadGraph {
         deterrent: Option<&CameraDeterrent>,
         context: &RouteContext<'_>,
     ) -> Result<Vec<u64>> {
-        let blocked = self.blocked_nodes(context.avoid);
         let edge_count = self.edges.len();
         let max_speed = self
             .edges
@@ -327,7 +309,11 @@ impl RoadGraph {
                     way.map_or(0, |info| info.lanes),
                     way.map_or(crate::graph::Surface::Unknown, |info| info.surface),
                 );
-                base_cost[index] = edge.duration_s() * static_factor * traffic;
+                let mut cost = edge.duration_s() * static_factor * traffic;
+                if let Some(risk) = context.risk {
+                    cost += risk.edge_penalty_s(from, self.nodes[edge.to as usize].position(), cost);
+                }
+                base_cost[index] = cost;
                 bearing_deg[index] = bearing(from, self.nodes[edge.to as usize].position()) as f32;
             }
         }
@@ -340,9 +326,6 @@ impl RoadGraph {
             ..self.offsets[start_node as usize + 1] as usize
         {
             let edge = self.edges[index];
-            if blocked.get(edge.to as usize).copied() == Some(true) {
-                continue;
-            }
             if deterrent.is_some_and(|d| d.blocks_edge(index)) {
                 continue;
             }
@@ -388,9 +371,6 @@ impl RoadGraph {
                 ..self.offsets[edge.to as usize + 1] as usize
             {
                 let next_edge = self.edges[next];
-                if blocked.get(next_edge.to as usize).copied() == Some(true) {
-                    continue;
-                }
                 if deterrent.is_some_and(|d| d.blocks_edge(next)) {
                     continue;
                 }

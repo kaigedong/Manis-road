@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use motu_core::LatLng;
+use motu_routing::risk::{self, RiskModel};
 use motu_routing::{
     Baseline, ParityReport, RoadGraph, RouteContext, RouteProfile, TrafficPrior, parity::compare,
 };
@@ -81,10 +82,12 @@ fn run() -> Result<bool, String> {
         Some(path) => load_avoid(&path)?,
         None => Vec::new(),
     };
+    // 禁摩区是软风险：区域内更贵，但仍然可走。
+    let risk = RiskModel::new(&[], risk::DEFAULT_CAMERA_RADIUS_M, &avoid, risk::DEFAULT_ZONE_FACTOR);
     let context = RouteContext {
         prior: prior.as_ref(),
         hour,
-        avoid: &avoid,
+        risk: Some(&risk),
     };
     let profile = RouteProfile::motorcycle_default();
 

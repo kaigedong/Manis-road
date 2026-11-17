@@ -20,6 +20,7 @@ pub mod parity;
 pub mod prior_build;
 pub mod profile;
 pub mod replan;
+pub mod risk;
 pub mod route;
 pub mod traffic;
 
@@ -30,6 +31,7 @@ pub use osm::{OsmBuildReport, build_from_osm_json};
 pub use metrics::{ClassDistance, RouteMetrics, measure_edges};
 pub use parity::{Baseline, BaselineRoute, ParityReport, RouteComparison};
 pub use profile::{ClassWeights, RouteProfile, TurnPenalties};
+pub use risk::{CameraIndex, CameraRisk, RiskModel, ZoneIndex, seconds_for_tab_type};
 pub use replan::{
     Candidate, ReplanPolicy, ReplanReason, ReplanState, evaluate_after, route_overlap,
 };

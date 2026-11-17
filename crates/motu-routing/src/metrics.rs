@@ -36,6 +36,12 @@ pub struct RouteMetrics {
     /// would silently satisfy the acceptance threshold, which is exactly the
     /// kind of fake pass the goal forbids.
     pub signals_per_km: Option<f64>,
+    /// Cameras within 30 m of the route, when a risk model was supplied.
+    pub cameras_on_route: Option<usize>,
+    /// Cameras per kilometre along the route.
+    pub cameras_per_km: Option<f64>,
+    /// Share of route length inside restricted zones.
+    pub restricted_share: Option<f64>,
     pub turn_count: usize,
     pub u_turn_count: usize,
     pub classes: Vec<ClassDistance>,
@@ -90,6 +96,9 @@ impl RouteMetrics {
             side_street_share: side_street_distance_m / total,
             side_street_distance_m,
             signals_per_km: None,
+            cameras_on_route: None,
+            cameras_per_km: None,
+            restricted_share: None,
             turn_count,
             u_turn_count,
             classes,
