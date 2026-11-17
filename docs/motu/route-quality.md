@@ -263,6 +263,51 @@ motu-graph metrics var/offline/graph-od.bin 31.1951,121.4368 31.3030,121.5150 \
 区域数据来源：`var/motu-web/cache.sqlite` 的 `map_areas`（摩途 `mapShowAreaSec`
 缓存，含全国禁区与限行线），只在本机使用、不分发。
 
+## 第 7 轮：基准对比工具与 Android 构建
+
+### 7.1 `motu-parity`：把“相对官方基准 ≤20%”变成可执行检查
+
+```bash
+cargo run -p manis-motu-routing --bin motu-parity -- compare \
+  --graph var/offline/graph-od.bin --baseline var/offline/baseline-calpath.json \
+  --report var/offline/parity-report.md
+```
+
+基线文件里每条路线含起终点、官方 distance/duration、以及可选折线。工具会：
+
+- 用本机图重算同一起终点，算**绕行百分比**（超过 +20% 判失败）
+- 有折线时算**重合度**（50 m 容差），没有就标注 `—`
+- 顺带输出干道/支路占比与灯/km
+- 任一条超预算或无法规划 → 退出码非零，数据准备阶段可以据此拦住
+
+基线文件**只存本地、不进仓库**（含厂商算路数据），缺失即跳过，不会悄悄算通过。
+
+**当前状态**：官方 `calPath` 数据还没采集（需要你的摩途账号登录一次）。先用本机规划器
+自产一份 `source: "self-check（非官方）"` 的基线跑通工具链路：
+
+```text
+通过 5/5，中位绕行 +0.0%（上限 +20%）
+| 人民广场→陆家嘴 | 8.48 | 8.48 | +0.0% | 1.00 | 20% | 9% | 1.4 | ✅ |
+```
+
+这是**冒烟验证，不是验收**——自己和自己比当然 0%。等真实基线到位，同一命令即可给出
+真实绕行。
+
+### 7.2 Android 构建链路打通
+
+本机环境：`ANDROID_HOME=/Users/bobo/Android/sdk`、NDK `27.0.12077973`、
+`cargo-ndk`、JDK 21、aarch64-linux-android 目标——全部就绪。
+
+```bash
+./android/build-rust.sh debug        # 生成 libmotu_ffi.so (73 MB, debug)
+cd android && ./gradlew assembleDebug
+```
+
+结果：`BUILD SUCCESSFUL`，产出 `app-debug.apk`（17 MB）。
+
+**装不上**：连接的设备 `AN5UUT5B12019436` 处于 `unauthorized`，需要手机上点一次
+「允许 USB 调试」。装上去之后才能验证真机断网行为。
+
 ## 还没做
 
 - 实测时段先验（需高德路况 key 或骑行轨迹；当前只有 assumption 占位）

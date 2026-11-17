@@ -95,6 +95,12 @@ motu-graph metrics var/offline/graph-od.bin 31.1951,121.4368 31.3030,121.5150 \
   --avoid var/offline/avoid-demo.json    # [[[lat,lon], ...]]
 ```
 
+## 基准对比
+
+`motu-parity compare --graph <graph.bin> --baseline <baseline.json>` 用本机图重算
+官方基线里的每条路线，检查绕行是否超过 +20%，并输出重合度、干道/支路占比与灯/km。
+基线文件只存本地，不进仓库。
+
 ## 连续重算
 
 `replan.rs` 只做“要不要重算”的决策：偏航 > 50 m 立即重算（3 s 冷却），或候选路线
