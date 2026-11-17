@@ -6,7 +6,7 @@
 
 use motu_core::LatLng;
 use motu_routing::graph::{Edge, GraphNode, RoadGraph, Surface, WayInfo};
-use motu_routing::{ClassWeights, RouteProfile, TurnPenalties};
+use motu_routing::{ClassWeights, RouteContext, RouteProfile, TurnPenalties};
 
 fn node(id: i64, lat: f64, lon: f64) -> GraphNode {
     GraphNode { id, lat, lon }
@@ -352,5 +352,78 @@ fn surface_and_lane_factors_change_the_choice() {
         passes_near(&paved, 31.2315),
         "the paved residential corridor must win, points: {:?}",
         paved.points
+    );
+}
+
+#[test]
+fn forbidden_area_is_avoided_during_planning() {
+    // One straight east-west road, plus a northern detour of the same class.
+    let nodes = vec![
+        node(1, 31.2300, 121.4700), // A
+        node(2, 31.2300, 121.4750), // inside the banned box
+        node(3, 31.2300, 121.4800), // D
+        node(4, 31.2320, 121.4700), // detour west
+        node(5, 31.2320, 121.4800), // detour east
+    ];
+    let ways = vec![WayInfo {
+        name: "东西路".to_owned(),
+        highway: "residential".to_owned(),
+        lanes: 1,
+        surface: Surface::Paved,
+    }];
+    // CSR order: node 0 owns 0-1, node 1 owns 2, node 2 none, node 3 owns 3,
+    // node 4 owns 4.
+    let edges = vec![
+        edge(1, 500.0, 30, 0),   // 0: A -> banned midpoint
+        edge(3, 300.0, 30, 0),   // 1: A -> detour west
+        edge(2, 500.0, 30, 0),   // 2: banned midpoint -> D
+        edge(4, 1100.0, 30, 0),  // 3: detour west -> detour east
+        edge(2, 300.0, 30, 0),   // 4: detour east -> D
+    ];
+    let graph = RoadGraph {
+        nodes,
+        signals: Vec::new(),
+        ways,
+        offsets: vec![0, 2, 3, 3, 4, 5],
+        edges,
+    };
+
+    // The banned box sits squarely over the direct line.
+    let ban = vec![vec![
+        LatLng::new(31.2295, 121.4745),
+        LatLng::new(31.2305, 121.4745),
+        LatLng::new(31.2305, 121.4755),
+        LatLng::new(31.2295, 121.4755),
+    ]];
+
+    let origin = LatLng::new(31.2300, 121.4700);
+    let destination = LatLng::new(31.2300, 121.4800);
+    let profile = RouteProfile::motorcycle_default();
+
+    let open = RouteContext::default();
+    let (direct, _) = graph
+        .route_report_with_context(origin, destination, &profile, None, &open)
+        .expect("route");
+    assert!(
+        direct.points.iter().any(|p| (p.longitude - 121.4750).abs() < 1e-9),
+        "without a ban the direct line is used"
+    );
+
+    let closed = RouteContext {
+        avoid: &ban,
+        ..RouteContext::default()
+    };
+    let (detour, _) = graph
+        .route_report_with_context(origin, destination, &profile, None, &closed)
+        .expect("detour must exist");
+    assert!(
+        !detour.points.iter().any(|p| (p.longitude - 121.4750).abs() < 1e-9),
+        "the banned midpoint must never be entered"
+    );
+    assert!(
+        detour.distance_m > direct.distance_m,
+        "the detour is longer: {} vs {}",
+        detour.distance_m,
+        direct.distance_m
     );
 }

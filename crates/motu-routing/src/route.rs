@@ -61,6 +61,10 @@ pub struct RouteContext<'a> {
     pub prior: Option<&'a TrafficPrior>,
     /// Local hour, 0..=23. Only read when `prior` is set.
     pub hour: u8,
+    /// Motorcycle-banned polygons (closed, WGS-84). Nodes inside are never
+    /// entered, so a forbidden area is a planning constraint rather than a
+    /// post-hoc audit of a route that already drove through it.
+    pub avoid: &'a [Vec<LatLng>],
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -245,6 +249,36 @@ impl RoadGraph {
         ))
     }
 
+    /// Nodes inside any forbidden polygon.
+    ///
+    /// A linear scan per polygon with a bounding-box reject keeps this cheap
+    /// enough to run per re-plan even on the 124k-node city graph.
+    fn blocked_nodes(&self, polygons: &[Vec<LatLng>]) -> Vec<bool> {
+        let mut blocked = vec![false; self.nodes.len()];
+        for polygon in polygons {
+            if polygon.len() < 3 {
+                continue;
+            }
+            let (mut south, mut north) = (f64::MAX, f64::MIN);
+            let (mut west, mut east) = (f64::MAX, f64::MIN);
+            for point in polygon {
+                south = south.min(point.latitude);
+                north = north.max(point.latitude);
+                west = west.min(point.longitude);
+                east = east.max(point.longitude);
+            }
+            for (index, node) in self.nodes.iter().enumerate() {
+                if node.lat < south || node.lat > north || node.lon < west || node.lon > east {
+                    continue;
+                }
+                if motu_core::geo::point_in_polygon(node.position(), polygon) {
+                    blocked[index] = true;
+                }
+            }
+        }
+        blocked
+    }
+
     /// A* over directed edges.
     ///
     /// Edges, not nodes, are the search states: the cost of leaving a junction
@@ -263,6 +297,7 @@ impl RoadGraph {
         deterrent: Option<&CameraDeterrent>,
         context: &RouteContext<'_>,
     ) -> Result<Vec<u64>> {
+        let blocked = self.blocked_nodes(context.avoid);
         let edge_count = self.edges.len();
         let max_speed = self
             .edges
@@ -305,6 +340,9 @@ impl RoadGraph {
             ..self.offsets[start_node as usize + 1] as usize
         {
             let edge = self.edges[index];
+            if blocked.get(edge.to as usize).copied() == Some(true) {
+                continue;
+            }
             if deterrent.is_some_and(|d| d.blocks_edge(index)) {
                 continue;
             }
@@ -350,6 +388,9 @@ impl RoadGraph {
                 ..self.offsets[edge.to as usize + 1] as usize
             {
                 let next_edge = self.edges[next];
+                if blocked.get(next_edge.to as usize).copied() == Some(true) {
+                    continue;
+                }
                 if deterrent.is_some_and(|d| d.blocks_edge(next)) {
                     continue;
                 }

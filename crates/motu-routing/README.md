@@ -85,6 +85,16 @@ motu-graph metrics var/offline/graph-od.bin 31.1951,121.4368 31.3030,121.5150 \
   --hour 8 --prior crates/motu-routing/examples/traffic-prior.json
 ```
 
+## 禁摩区域
+
+`RouteContext.avoid` 接收多边形，规划期把这些区域内的节点标为不可进入，A* 直接绕开
+（不是事后审计）。
+
+```bash
+motu-graph metrics var/offline/graph-od.bin 31.1951,121.4368 31.3030,121.5150 \
+  --avoid var/offline/avoid-demo.json    # [[[lat,lon], ...]]
+```
+
 ## 连续重算
 
 `replan.rs` 只做“要不要重算”的决策：偏航 > 50 m 立即重算（3 s 冷却），或候选路线

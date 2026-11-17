@@ -90,13 +90,19 @@ fn run() -> Result<(), String> {
             let destination = parse_point(&args.next().ok_or_else(usage)?)?;
             let mut hour: Option<u8> = None;
             let mut prior_path: Option<String> = None;
+            let mut avoid_path: Option<String> = None;
             while let Some(flag) = args.next() {
                 match flag.as_str() {
                     "--hour" => hour = Some(parse_hour(args.next())?),
                     "--prior" => prior_path = args.next(),
+                    "--avoid" => avoid_path = args.next(),
                     other => return Err(format!("unknown flag {other}")),
                 }
             }
+            let avoid = match avoid_path.as_deref() {
+                Some(path) => load_avoid(path)?,
+                None => Vec::new(),
+            };
             let prior = match prior_path.as_deref() {
                 Some(path) => Some(
                     TrafficPrior::load(Path::new(path)).map_err(|error| error.to_string())?,
@@ -106,6 +112,7 @@ fn run() -> Result<(), String> {
             let context = RouteContext {
                 prior: prior.as_ref(),
                 hour: hour.unwrap_or(12),
+                avoid: &avoid,
             };
             let graph = RoadGraph::load(Path::new(&input)).map_err(|error| error.to_string())?;
             let plan = graph
@@ -128,6 +135,7 @@ fn run() -> Result<(), String> {
             let mut force_neutral = false;
             let mut hour: Option<u8> = None;
             let mut prior_path: Option<String> = None;
+            let mut avoid_path: Option<String> = None;
             let mut profile = RouteProfile::motorcycle_default();
             while let Some(flag) = args.next() {
                 match flag.as_str() {
@@ -139,6 +147,7 @@ fn run() -> Result<(), String> {
                     "--residential" => profile.classes.residential = parse_weight(args.next())?,
                     "--hour" => hour = Some(parse_hour(args.next())?),
                     "--prior" => prior_path = args.next(),
+                    "--avoid" => avoid_path = args.next(),
                     other => return Err(format!("unknown flag {other}")),
                 }
             }
@@ -152,9 +161,14 @@ fn run() -> Result<(), String> {
                 ),
                 None => None,
             };
+            let avoid = match avoid_path.as_deref() {
+                Some(path) => load_avoid(path)?,
+                None => Vec::new(),
+            };
             let context = RouteContext {
                 prior: prior.as_ref(),
                 hour: hour.unwrap_or(12),
+                avoid: &avoid,
             };
             let graph = RoadGraph::load(Path::new(&input)).map_err(|error| error.to_string())?;
             let (plan, metrics) = graph
@@ -205,6 +219,21 @@ fn neutral_profile() -> RouteProfile {
         lane_step: 0.0,
         unpaved_factor: 1.0,
     }
+}
+
+/// `[[lat, lon], [lat, lon], ...]` — one polygon per element.
+fn load_avoid(path: &str) -> Result<Vec<Vec<LatLng>>, String> {
+    let bytes = std::fs::read(path).map_err(|error| format!("{path}: {error}"))?;
+    let raw: Vec<Vec<[f64; 2]>> =
+        serde_json::from_slice(&bytes).map_err(|error| format!("{path}: {error}"))?;
+    Ok(raw
+        .into_iter()
+        .map(|ring| {
+            ring.into_iter()
+                .map(|[lat, lon]| LatLng::new(lat, lon))
+                .collect()
+        })
+        .collect())
 }
 
 fn parse_hour(value: Option<String>) -> Result<u8, String> {
