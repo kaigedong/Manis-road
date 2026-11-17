@@ -57,6 +57,10 @@ public final class BaseMapActivity extends Activity {
             "endpoints": {
               "type": "geojson",
               "data": { "type": "FeatureCollection", "features": [] }
+            },
+            "cameras": {
+              "type": "geojson",
+              "data": { "type": "FeatureCollection", "features": [] }
             }
           },
           "layers": [
@@ -102,6 +106,20 @@ public final class BaseMapActivity extends Activity {
               "paint": { "line-color": "#d81b60", "line-width": 6 }
             },
             {
+              "id": "cameras",
+              "type": "circle",
+              "source": "cameras",
+              "paint": {
+                "circle-radius": 5,
+                "circle-color": ["match", ["get", "type"],
+                  1, "#e53935", 3, "#e53935", 10, "#e53935",
+                  4, "#fb8c00", 5, "#fb8c00", 7, "#fb8c00", 13, "#fb8c00",
+                  "#757575"],
+                "circle-stroke-color": "#ffffff",
+                "circle-stroke-width": 1
+              }
+            },
+            {
               "id": "endpoints",
               "type": "circle",
               "source": "endpoints",
@@ -117,6 +135,8 @@ public final class BaseMapActivity extends Activity {
         """;
 
     private MapView mapView;
+    /** 已加载的电子眼（原始 JSON），点击时找最近的一个。 */
+    private final java.util.List<JSONObject> cameraPoints = new java.util.ArrayList<>();
     /** 自动跑一次重算检查，避免依赖点击（MapView 的 SurfaceView 会挡触摸）。 */
     private boolean replanCheckDone;
     /** 当前路线折线，重算检查要用它算偏航。 */
@@ -138,6 +158,7 @@ public final class BaseMapActivity extends Activity {
                     new org.maplibre.android.maps.Style.Builder().fromJson(STYLE_JSON),
                     style -> {
                         Log.i(TAG, "style loaded");
+                        drawCameras(map, style);
                         planAndDraw(map, style);
                     });
         });
@@ -397,5 +418,97 @@ public final class BaseMapActivity extends Activity {
             runOnUiThread(() -> resultText.setText(getString(
                     R.string.replan_result, done, worst, flips, detail)));
         }).start();
+    }
+
+    /** 电子眼点位：读本地 cameras.json，画成圆点，点一下看类型。 */
+    private void drawCameras(org.maplibre.android.maps.MapLibreMap map, Style style) {
+        JSONArray cameras = OfflineData.parseCameras(
+                OfflineData.readText(OfflineData.camerasFile(this)));
+        if (cameras == null || cameras.length() == 0) {
+            Log.i(TAG, "no cameras.json on device");
+            return;
+        }
+        java.util.List<Feature> features = new java.util.ArrayList<>(cameras.length());
+        for (int index = 0; index < cameras.length(); index += 1) {
+            JSONObject camera = cameras.optJSONObject(index);
+            JSONObject position = camera == null ? null : camera.optJSONObject("position");
+            if (position == null) {
+                continue;
+            }
+            JSONArray tabs = camera.optJSONArray("tabTypes");
+            int type = tabs != null && tabs.length() > 0 ? tabs.optInt(0, 0) : 0;
+            com.google.gson.JsonObject props = new com.google.gson.JsonObject();
+            props.addProperty("id", camera.optString("id"));
+            props.addProperty("type", type);
+            cameraPoints.add(camera);
+            features.add(Feature.fromGeometry(
+                    Point.fromLngLat(position.optDouble("longitude"),
+                            position.optDouble("latitude")),
+                    props));
+        }
+        ((GeoJsonSource) style.getSourceAs("cameras"))
+                .setGeoJson(FeatureCollection.fromFeatures(features));
+        Log.i(TAG, "cameras drawn=" + features.size());
+
+        // 用「最近的电子眼」而不是 queryRenderedFeatures：5 像素的圆点用手指去点
+        // 本来就不该要求像素级准确，骑行时更不可能。
+        map.addOnMapClickListener(point -> {
+            JSONObject nearest = null;
+            double nearestM = Double.MAX_VALUE;
+            for (JSONObject camera : cameraPoints) {
+                JSONObject position = camera.optJSONObject("position");
+                if (position == null) {
+                    continue;
+                }
+                double distance = distanceMeters(point.getLatitude(), point.getLongitude(),
+                        position.optDouble("latitude"), position.optDouble("longitude"));
+                if (distance < nearestM) {
+                    nearestM = distance;
+                    nearest = camera;
+                }
+            }
+            if (nearest == null || nearestM > CAMERA_TAP_RADIUS_M) {
+                return false;
+            }
+            JSONArray tabs = nearest.optJSONArray("tabTypes");
+            int type = tabs != null && tabs.length() > 0 ? tabs.optInt(0, 0) : 0;
+            Toast.makeText(this, getString(R.string.camera_toast,
+                    cameraTypeName(type), Math.round(nearestM)), Toast.LENGTH_SHORT).show();
+            return true;
+        });
+    }
+
+    /** 点击容差：离最近的电子眼超过这个距离就不响应，让地图恢复默认行为。 */
+    private static final double CAMERA_TAP_RADIUS_M = 300.0;
+
+    private static double distanceMeters(double lat1, double lon1, double lat2, double lon2) {
+        double phi1 = Math.toRadians(lat1);
+        double phi2 = Math.toRadians(lat2);
+        double dPhi = Math.toRadians(lat2 - lat1);
+        double dLambda = Math.toRadians(lon2 - lon1);
+        double h = Math.sin(dPhi / 2) * Math.sin(dPhi / 2)
+                + Math.cos(phi1) * Math.cos(phi2) * Math.sin(dLambda / 2) * Math.sin(dLambda / 2);
+        return 2 * 6_371_008.8 * Math.asin(Math.sqrt(h));
+    }
+
+    /** `CameraTabType` 的取值，这里只需要给骑手看懂的那几类。 */
+    private static String cameraTypeName(int type) {
+        return switch (type) {
+            case 1 -> "禁行/限行";
+            case 2 -> "应急车道";
+            case 3 -> "非机动车道";
+            case 4 -> "闯红灯";
+            case 5 -> "超速";
+            case 6 -> "公交车道";
+            case 7 -> "车道违法";
+            case 8 -> "逆行";
+            case 9 -> "尾号限行";
+            case 10 -> "不戴头盔";
+            case 11 -> "鸣笛";
+            case 12 -> "现场处罚";
+            case 13 -> "压线";
+            case 14 -> "灯光不当";
+            default -> "其他";
+        };
     }
 }

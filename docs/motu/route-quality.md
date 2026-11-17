@@ -345,6 +345,22 @@ Rust 侧的 `ReplanPolicy` 已经通过 `evaluate_after()` 抽成纯函数，JNI
 **这套检查没覆盖的**：候选路线触发的切换（省 8% 且重合度 ≤0.7 且距上次切换 ≥15 s）
 在真机上没有被触发过，那条路径目前只有 Rust 单测覆盖；也没有用真实 GPS 轨迹跑过。
 
+## 第 12 轮：电子眼图层上真机
+
+`cameras.json`（2,399 条，来自官方接口的本机缓存）在 `BaseMapActivity` 里读成 GeoJSON
+圆点图层，按 `tabTypes[0]` 着色。数据分布很偏——2,337 条是 type 1（禁行/限行），
+剩下零散是闯红灯 22、公交车道 12、非机动车道 10、车道违法 7 等，所以地图上几乎全是红点。
+
+点击用「离点击点最近的电子眼（300 m 内）」而不是 `queryRenderedFeatures`：
+5 px 的圆点用指头点本来就不现实，骑行时更不可能。实测弹出
+`电子眼：禁行/限行（486 m）`，与离线算出的 490 m 一致。
+
+截图：[`images/android-cameras.png`](images/android-cameras.png)
+
+**踩到的坑**：MapView 的 SurfaceView 会吞掉兄弟控件的点击（点按钮地图却平移），
+所以重算检查改成规划完成后自动跑一次；电子眼点击则挂在 MapLibre 自己的
+`addOnMapClickListener` 上，不受影响。
+
 ## 还没做
 
 - 实测时段先验（需高德路况 key 或骑行轨迹；当前只有 assumption 占位）

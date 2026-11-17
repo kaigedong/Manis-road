@@ -74,6 +74,10 @@ Android 接 PMTiles 需要一个 tile provider，尚未实现。
 - 进入后自动规划一条离线路线（人民广场→陆家嘴）并画在地图上：洋红线 + 绿色起点 +
   红色终点，相机按折线范围取景。截图：
   [`docs/motu/images/android-route.png`](../docs/motu/images/android-route.png)
+- 电子眼图层：读取 `files/offline/cameras.json`（`adb push var/offline/cameras.json`），
+  2,399 个点位按类型着色（禁行/非机动车道/不戴头盔=红，闯红灯/超速/车道违法/压线=橙，
+  其余=灰），点击弹「最近电子眼 + 类型 + 距离」（300 m 内命中）。
+  截图：[`docs/motu/images/android-cameras.png`](../docs/motu/images/android-cameras.png)
 - 离线图通过 `adb push var/offline/graph-od.bin \
   /sdcard/Android/data/com.manisroad.app/files/offline/graph.bin` 提供
 
