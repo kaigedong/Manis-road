@@ -1,0 +1,31 @@
+[package]
+name = "manis-motu-routing"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Offline OSM road graph and A* routing for the Motu motorcycle client"
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "motu_routing"
+path = "src/lib.rs"
+
+[[bin]]
+name = "motu-graph"
+path = "src/bin/motu-graph.rs"
+
+[dependencies]
+manis-motu-core = { path = "../motu-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints.rust]
+unsafe_code = "warn"
+
+[lints.clippy]
+all = "warn"
+pedantic = "warn"

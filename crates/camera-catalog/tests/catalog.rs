@@ -11,6 +11,7 @@ fn sample() -> Catalog {
             published_on: "2025-08-28".into(),
             review_note: "等待核对官方图片".into(),
         }],
+        events: vec![],
         records: vec![CameraRecord {
             id: "xu-001".into(),
             source_id: "xuhui-20250828".into(),
@@ -79,11 +80,9 @@ fn only_reviewed_precise_locations_appear_on_map() -> Result<(), CatalogError> {
     Ok(())
 }
 
-#[tokio::test]
-async fn collected_announcement_data_stays_in_review_queue() -> Result<(), CatalogError> {
-    let fixture =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("data/shanghai-cameras.json");
-    let catalog = Catalog::load(fixture).await?;
+#[test]
+fn collected_announcement_data_stays_in_review_queue() -> Result<(), CatalogError> {
+    let catalog = Catalog::parse_str(include_str!("../data/shanghai-cameras.json"))?;
     assert_eq!(catalog.sources.len(), 2);
     assert_eq!(catalog.records.len(), 3);
     assert!(catalog.map_points().is_empty());

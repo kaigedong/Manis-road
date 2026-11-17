@@ -7,6 +7,7 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::api::{HeaderInit, Transport, base_headers, build_request, decode_envelope, endpoints};
 use crate::crypto::{md5_hex, safe_env_token};
@@ -53,7 +54,9 @@ pub fn login<T: Transport>(
         now_ms,
     )?;
     let response = transport.execute(&request)?;
-    let envelope: ApiEnvelope<LoginUser> = decode_envelope(&response)?;
+    // Parse the envelope as `Value` first so a shape mismatch can be reported
+    // with a redacted payload instead of a bare serde line/column error.
+    let envelope: ApiEnvelope<Value> = decode_envelope(&response)?;
     if !envelope.is_success() {
         let code = envelope.code;
         let message = envelope
@@ -61,9 +64,15 @@ pub fn login<T: Transport>(
             .unwrap_or_else(|| format!("login failed with code {code}"));
         return Err(MotuError::Server(message));
     }
-    let user = envelope
+    let data = envelope
         .data
         .ok_or_else(|| MotuError::Api("login response has no data".to_owned()))?;
+    let user: LoginUser = serde_json::from_value(data.clone()).map_err(|error| {
+        MotuError::Api(format!(
+            "cannot parse login payload: {error}; payload={}",
+            redact_payload(&data)
+        ))
+    })?;
     if user.token.is_empty() {
         return Err(MotuError::Api("login response has no token".to_owned()));
     }
@@ -105,6 +114,29 @@ pub fn logout<T: Transport>(
         ));
     }
     Ok(())
+}
+
+/// Serialise a payload for an error message, masking credentials and PII.
+fn redact_payload(data: &Value) -> String {
+    let mut value = data.clone();
+    if let Some(object) = value.as_object_mut() {
+        for key in [
+            "token",
+            "refreshToken",
+            "pwd",
+            "phone",
+            "realName",
+            "nickName",
+            "contactWay",
+            "hldSn",
+        ] {
+            if object.contains_key(key) {
+                object.insert(key.to_owned(), Value::String("***".to_owned()));
+            }
+        }
+    }
+    let text = serde_json::to_string(&value).unwrap_or_default();
+    text.chars().take(1500).collect()
 }
 
 fn login_headers(device_id: &str, signature_md5: &str, now_ms: i64) -> Vec<(String, String)> {
@@ -189,6 +221,81 @@ mod tests {
                 .iter()
                 .any(|(key, value)| key == "deviceId" && value == "device-1")
         );
+    }
+
+    #[test]
+    fn login_accepts_formatted_dates_in_timestamps() {
+        let transport = FakeTransport::new(
+            r#"{"code":0,"message":"ok","data":{"token":"T","userId":7,"phone":"13800000000",
+                "memEndTime":"2026-05-09","memStartTime":"2025-05-09 10:00:00",
+                "createTime":"2024-01-02"}}"#,
+        );
+        let outcome = login(
+            &transport,
+            "https://example.test/",
+            "device-1",
+            "",
+            "13800000000",
+            "secret",
+            1_700_000_000_000,
+        )
+        .unwrap();
+        assert_eq!(outcome.user.mem_end_time, Some(1_778_256_000_000));
+        assert_eq!(outcome.session.mem_end_time_ms, Some(1_778_256_000_000));
+        assert_eq!(outcome.user.mem_start_time, Some(1_746_756_000_000));
+        assert_eq!(outcome.user.create_time, Some(1_704_124_800_000));
+    }
+
+    #[test]
+    fn login_accepts_the_live_payload_shape_with_nullable_fields() {
+        // Trimmed copy of a real `v4/user/login` response: nullable counters,
+        // a date-only `createTime`, and a `refreshToken`.
+        let transport = FakeTransport::new(
+            r#"{"code":0,"message":"ok","data":{
+                "address":"","createTime":"2026-05-09","cruiseCount":3,"expCount":3,
+                "fansCount":null,"followCount":null,"hasPwd":true,
+                "isPro":0,"memEndTime":null,"memStartTime":null,
+                "nickName":"motu","phone":"13800000000","photo":"",
+                "refreshToken":"refresh-token","sex":null,"token":"T",
+                "type":1,"userId":527965,"weChatBind":false}}"#,
+        );
+        let outcome = login(
+            &transport,
+            "https://example.test/",
+            "device-1",
+            "",
+            "13800000000",
+            "secret",
+            1_700_000_000_000,
+        )
+        .unwrap();
+        assert_eq!(outcome.user.user_id, Some(527_965));
+        assert_eq!(outcome.user.create_time, Some(1_778_256_000_000));
+        assert_eq!(outcome.user.sex, None);
+        assert_eq!(outcome.user.exp_count, 3);
+        assert_eq!(outcome.user.refresh_token.as_deref(), Some("refresh-token"));
+    }
+
+    #[test]
+    fn login_reports_redacted_payload_when_a_field_cannot_be_parsed() {
+        let transport = FakeTransport::new(
+            r#"{"code":0,"message":"ok","data":{"token":"secret-token","phone":"13800000000","memEndTime":"someday"}}"#,
+        );
+        let error = login(
+            &transport,
+            "https://example.test/",
+            "",
+            "",
+            "13800000000",
+            "secret",
+            1_700_000_000_000,
+        )
+        .unwrap_err();
+        let message = error.to_string();
+        assert!(message.contains("memEndTime"));
+        assert!(message.contains("someday"));
+        assert!(!message.contains("secret-token"));
+        assert!(!message.contains("13800000000"));
     }
 
     #[test]

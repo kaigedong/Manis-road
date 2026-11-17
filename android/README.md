@@ -12,10 +12,12 @@ app/src/main/
 ├── java/com/manisroad/app/
 │   ├── MainActivity.java        仪表盘：版本、接口数、车辆数、登录状态
 │   ├── LoginActivity.java       官方密码登录（网络在 Rust 核心）
-│   ├── MapActivity.java         模拟 GPS、电子眼提醒与点击详情
+│   ├── MapActivity.java         电子眼提醒、点击详情、离线路线与 GPS 按钮
+│   ├── CruiseService.java       GPS 前台服务（持续定位/扫描/通知）
 │   ├── VehicleActivity.java     车辆资料（默认车辆 upsert）
 │   ├── SettingsActivity.java    本地设置
-│   ├── core/MotuCore.java       native 声明 + ensureInit
+│   ├── core/MotuCore.java       native 声明 + ensureInit（含 loadGraph/route）
+│   ├── core/OfflineData.java    离线路网图位置（外部私有目录）
 │   ├── core/CoreResult.java     信封解析
 │   ├── core/SigningCertificate.java  读取 APK 签名证书（MD5 在 Rust）
 │   └── ui/MapCanvasView.java    无依赖示意地图
@@ -60,7 +62,39 @@ sdk.dir=/path/to/Android/sdk
 - 登录成功后会保存 `token`、`deviceId`、用户摘要，仪表盘显示登录状态，并可退出；
 - 地图页「同步官方点位」在未登录时提示先登录；注入假 token 后，Rust/rustls
   能调用加密的 `searchRulePoiSec`，服务端返回的 token 错误会显示在界面上；
-- 官方点位结果只进 Rust 内存扫描集合，地图最多绘制 200 个标记，不写本地 JSON；
+- 离线路线与 GPS 巡航：`MapActivity` 的「离线路线」调用 `MotuCore.route(graphPath, …)`，
+  使用本机 `graph.bin`；「GPS 巡航」申请 `ACCESS_FINE_LOCATION`，使用
+  `GPS_PROVIDER`（仅 GNSS），每秒扫描本地电子眼，每 10 秒按当前位置重算路线。
+  两者都不访问网络。
+
+### 推送离线路网图
+
+图文件不随 APK 分发（全市约 48 MB）。调试版可直接推到应用外部私有目录：
+
+```bash
+adb push var/offline/graph.bin \
+  /sdcard/Android/data/com.manisroad.app/files/offline/graph.bin
+```
+
+没有图文件时「离线路线」会提示缺失，不会回退到网络。`OfflineData` 也会尝试从
+APK `assets/graph.bin` 复制（如果打包时放了进去）。
+
+### 离线详情
+
+`MapActivity` 启动时读入 `files/offline/details.json`（由 Web 的
+`/api/export/details` 生成），点击点位优先显示本地详情，不需要登录或网络。
+在线打开的新详情会合并写回同一文件；点位 id 使用 `memberByString`。
+
+### 离线巡航的边界
+
+- `CruiseService` 是 `foregroundServiceType="location"` 的前台服务，锁屏/切后台后
+  仍持续定位并通过通知展示最近一次电子眼提醒；活动页负责渲染广播结果，并用
+  路由步骤的 `startIndex`/`endIndex` 显示「下一步：… · N m」。
+- 语音播报、屏幕常亮、后台重算路线尚未实现（重算只在活动页存活时每 10 秒执行）。
+- 每 10 秒重算路线是最小可用策略，没有做“偏离 80 m 持续 4 秒”的精细判断。
+- 定位权限被拒绝时只提示，不崩溃。
+- 官方点位结果只进 Rust 内存扫描集合，地图最多绘制 200 个标记，不写本地 JSON
+  （Web 调试台的本地缓存是另一套实现，见 `crates/motu-web/README.md`）；
 - 地图标记点击命中已用演示点位验证：点击后命中 Rust 返回的标记并在界面上显示
   「演示点位没有官方详情」；未登录时同样提示，不会发起详情请求；
 - 官方标记的详情路径已接通：Rust 调用 `trafficEyesDetailSec` 与

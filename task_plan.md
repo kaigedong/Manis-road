@@ -4,7 +4,7 @@
 先收集可追溯的上海电子眼公开记录，构建模块化 Rust 数据底座；导航与正式 PRD 留待后续讨论。
 
 ## 当前阶段
-阶段 7：完成，首次 commit 执行中
+阶段 9：实现完成，等待官方原始公告样本作真实采集验收
 
 ## 各阶段
 - 阶段 1：收集竞品、上海通行规则、地图与离线技术资料。状态：complete（政府原文直取受环境阻断，精确规则仍待验证）
@@ -13,7 +13,9 @@
 - 阶段 4：用户决定暂缓导航路线和 PRD，优先收集电子眼记录。状态：complete（范围变更）
 - 阶段 5：收集 2 个官方公告来源与 3 个待核验候选点位；搭建 Rust 领域模型、校验与已审核点位过滤。状态：complete
 - 阶段 6：Rust 6 项测试、fmt、clippy、CLI 验证均通过；已说明数据仅为候选，源网页原文和地理点位仍需人工核对。状态：complete
-- 阶段 7：根目录 Cargo workspace，crates/camera-catalog 独立 crate 与 Tokio 异步加载；crates/camera-web Rust/WASM 审核预览；原生测试、WASM 构建与 Chrome 冒烟均通过。准备提交首次 commit。状态：complete
+- 阶段 7：根目录 Cargo workspace，camera-catalog/camera-web、Tokio、WASM 浏览器冒烟已提交首次 commit。状态：complete
+- 阶段 8：移除 camera-catalog 包内 main.rs，把 Tokio 入口放进独立 camera-cli；workspace 验证通过，未 commit。状态：complete
+- 阶段 9：camera-catalog 内有 src/catalog/ 与 src/collector/；实现官方白名单 HTTPS 拉取、HTML 表格候选抽取、内容变更/人工复核事件、去重和原始快照归档；CLI collect-file/collect-url、WASM 展示事件。Rust 测试/Clippy/WASM/浏览器验证通过；真实官网原文因当前网络安全限制未抓取，零真实在线采集事件，待可达环境或提供合法 HTML。未 commit。状态：complete（受外部原文可达性限制）
 
 ## 关键问题
 - 已确认不强求离线导航，按监控空白区规划；缩放展示摄像头与照片日期；只做 Android，浏览器与 Android 功能一致；用户选择摩托车型号。

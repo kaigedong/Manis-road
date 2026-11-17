@@ -45,24 +45,42 @@ pub struct LoginUser {
     pub real_name: String,
     #[serde(default)]
     pub photo: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_i32")]
     pub is_pro: i32,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "crate::wire_time::option_millis")]
     pub mem_start_time: Option<i64>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "crate::wire_time::option_millis")]
     pub mem_end_time: Option<i64>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_bool")]
     pub has_pwd: bool,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_i32")]
     pub exp_count: i32,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_i32")]
     pub cruise_count: i32,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "crate::wire_time::option_millis")]
     pub create_time: Option<i64>,
+    /// Nullable on the wire: accounts without a profile return `sex: null`.
     #[serde(default)]
-    pub sex: i32,
-    #[serde(default)]
+    pub sex: Option<i32>,
+    #[serde(default, deserialize_with = "null_i32")]
     pub r#type: i32,
+    /// Refresh credential returned by `v4/user/login`; not persisted yet.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refresh_token: Option<String>,
+}
+
+fn null_i32<'de, D>(deserializer: D) -> Result<i32, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(Option::<i32>::deserialize(deserializer)?.unwrap_or_default())
+}
+
+fn null_bool<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(Option::<bool>::deserialize(deserializer)?.unwrap_or_default())
 }
 
 /// Cursor page returned by list endpoints.
@@ -195,6 +213,17 @@ pub struct TrafficCamera {
 }
 
 impl TrafficCamera {
+    /// Stable identity for local caching: the server `memberByString` when it
+    /// is present, otherwise the synthetic `lat,lon:type` id.
+    #[must_use]
+    pub fn cache_key(&self) -> String {
+        self.member_by_string
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map_or_else(|| self.id.clone(), str::to_owned)
+    }
+
     #[must_use]
     pub fn new(
         id: impl Into<String>,

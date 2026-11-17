@@ -11,4 +11,7 @@ serde_json = "1"
 thiserror = "2"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-tokio = { version = "1", features = ["fs", "macros", "rt-multi-thread"] }
+html5ever = "0.27"
+markup5ever_rcdom = "0.3"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+sha2 = "0.10"

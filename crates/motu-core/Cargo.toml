@@ -28,6 +28,13 @@ thiserror = "2"
 [features]
 default = []
 http = ["dep:reqwest"]
+# Local SQLite cache for synced camera points, details and images.
+cache = ["dep:rusqlite"]
+
+[dependencies.rusqlite]
+version = "0.40"
+optional = true
+features = ["bundled"]
 
 [dependencies.reqwest]
 version = "0.12"

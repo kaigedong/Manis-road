@@ -323,20 +323,26 @@ pub fn parse_amap_positions(value: &str) -> Result<Vec<LatLng>> {
     Ok(points)
 }
 
-/// Encode a Google/`AMap`-style polyline (precision 1e5).
+/// Encode a Google/`AMap`-style polyline (precision `1e5`).
+#[must_use]
+pub fn encode_polyline(points: &[LatLng]) -> String {
+    encode_polyline_scaled(points, 1e5)
+}
+
+/// Encode with an explicit coordinate scale; `AMap` map areas use `1e6`.
 #[must_use]
 #[allow(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
-    reason = "polyline coordinates are scaled by 1e5 and fit i64"
+    reason = "polyline coordinates are scaled and fit i64"
 )]
-pub fn encode_polyline(points: &[LatLng]) -> String {
+pub fn encode_polyline_scaled(points: &[LatLng], scale: f64) -> String {
     let mut output = String::new();
     let mut last_lat = 0_i64;
     let mut last_lon = 0_i64;
     for point in points {
-        let lat = (point.latitude * 1e5).round() as i64;
-        let lon = (point.longitude * 1e5).round() as i64;
+        let lat = (point.latitude * scale).round() as i64;
+        let lon = (point.longitude * scale).round() as i64;
         encode_signed(lat - last_lat, &mut output);
         encode_signed(lon - last_lon, &mut output);
         last_lat = lat;
@@ -362,12 +368,20 @@ fn encode_signed(value: i64, output: &mut String) {
     output.push(char::from_u32((v + 63) as u32).unwrap_or('?'));
 }
 
-/// Decode a Google/`AMap`-style polyline (precision 1e5).
+/// Decode a Google/`AMap`-style polyline (precision `1e5`).
+pub fn decode_polyline(value: &str) -> Result<Vec<LatLng>> {
+    decode_polyline_scaled(value, 1e5)
+}
+
+/// Decode a polyline whose coordinates were scaled by `scale`.
+///
+/// `AMap`'s `PolylineUtil` uses `1e6` for `posEncode` (map areas), while the
+/// route/Google format uses `1e5`; mixing them yields out-of-range latitudes.
 #[allow(
     clippy::cast_precision_loss,
-    reason = "polyline precision is fixed at 1e-5 degrees"
+    reason = "polyline precision is fixed at 1e-5/1e-6 degrees"
 )]
-pub fn decode_polyline(value: &str) -> Result<Vec<LatLng>> {
+pub fn decode_polyline_scaled(value: &str, scale: f64) -> Result<Vec<LatLng>> {
     let bytes = value.as_bytes();
     let mut index = 0_usize;
     let mut lat = 0_i64;
@@ -376,7 +390,7 @@ pub fn decode_polyline(value: &str) -> Result<Vec<LatLng>> {
     while index < bytes.len() {
         lat += decode_signed(bytes, &mut index)?;
         lon += decode_signed(bytes, &mut index)?;
-        let point = LatLng::new(lat as f64 / 1e5, lon as f64 / 1e5);
+        let point = LatLng::new(lat as f64 / scale, lon as f64 / scale);
         if !point.is_valid() {
             return Err(MotuError::Route(
                 "decoded coordinate out of range".to_owned(),

@@ -66,6 +66,17 @@ public final class MotuCore {
     private static native String nativeRouteAudit(String pointsJson, String areasJson,
                                                   String camerasJson, double bufferMeters);
 
+    private static native String nativeLoadGraph(String graphPath);
+
+    private static native String nativeRoute(String graphPath, double originLat, double originLon,
+                                             double destinationLat, double destinationLon);
+
+    private static native String nativeRouteAvoiding(String graphPath, double originLat,
+                                                     double originLon, double destinationLat,
+                                                     double destinationLon, String camerasJson,
+                                                     double radiusM, double maxDetourRatio,
+                                                     double maxDetourMinutes);
+
     private static native String nativePlanStraightLine(String requestJson);
 
     private static native String nativeEncodePolyline(String pointsJson);
@@ -190,6 +201,29 @@ public final class MotuCore {
                 areas == null ? "[]" : areas.toString(),
                 cameras == null ? "[]" : cameras.toString(),
                 bufferMeters));
+    }
+
+    /** Load (and cache) the offline road graph, returning node/edge counts. */
+    public static CoreResult loadGraph(String graphPath) {
+        return CoreResult.parse(nativeLoadGraph(graphPath));
+    }
+
+    /** Offline A* route; the first call loads {@code graphPath} into memory. */
+    public static CoreResult route(String graphPath, double originLat, double originLon,
+                                   double destinationLat, double destinationLon) {
+        return CoreResult.parse(nativeRoute(
+                graphPath, originLat, originLon, destinationLat, destinationLon));
+    }
+
+    /** Offline A* with camera penalties; returns {plan, avoidance}. */
+    public static CoreResult routeAvoiding(String graphPath, double originLat, double originLon,
+                                           double destinationLat, double destinationLon,
+                                           JSONArray cameras, double radiusM,
+                                           double maxDetourRatio, double maxDetourMinutes) {
+        return CoreResult.parse(nativeRouteAvoiding(
+                graphPath, originLat, originLon, destinationLat, destinationLon,
+                cameras == null ? "[]" : cameras.toString(),
+                radiusM, maxDetourRatio, maxDetourMinutes));
     }
 
     public static CoreResult planStraightLine(JSONObject request) {

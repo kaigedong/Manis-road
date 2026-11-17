@@ -1,9 +1,11 @@
 [workspace]
 members = [
     "crates/camera-catalog",
+    "crates/camera-cli",
     "crates/camera-web",
     "crates/motu-core",
     "crates/motu-ffi",
+    "crates/motu-routing",
     "crates/motu-web",
 ]
 default-members = ["crates/camera-catalog"]

@@ -83,6 +83,16 @@ Base64 salt 文本本身，而不是解码后的字节或哈希。Rust 侧默认
   加入 `timeStamp` 与大写 `sign`。
 - 成功响应 `data` 至少包含 `token`、`userId`、`phone`、`nickName`、`isPro`、
   `memEndTime`。`token` 存入本地状态，后续用户接口通过 `token` 头传递。
+- 时间字段**不保证是数字**：真实账号的 `createTime` 会返回 `"2026-05-09"` 这类
+  日期字符串（Java 侧声明为 `Long`，但实测如此）。Rust 用
+  `wire_time::option_millis` 兼容数字、数字字符串和
+  `yyyy-MM-dd[ HH:mm[:ss]]`（按 +08:00 解析为毫秒）；解析失败时登录错误会附带
+  脱敏后的响应体，便于定位字段。
+- 同一份响应里还有**可空字段**：`sex: null`、`memEndTime: null`、
+  `fansCount: null` 等。Rust 侧对 `isPro`/`expCount`/`cruiseCount`/`type`
+  做了 null→默认值处理，`sex` 用 `Option<i32>`。
+- 响应包含 `refreshToken`；目前**不落盘**（只保存服务端 `token`），token 刷新
+  尚未实现。错误诊断里 `token`/`refreshToken`/`phone` 等字段都会被替换成 `***`。
 - `POST v4/user/logout` 需要 `token` 头；客户端无论服务端退出是否成功都会清除
   本地会话。
 - 密码只做协议要求的小写 MD5，不写入本地状态；本地只保存 token 与用户摘要。
@@ -95,7 +105,9 @@ Base64 salt 文本本身，而不是解码后的字节或哈希。Rust 侧默认
   `tabTypes`、默认车辆颜色/号牌。
 - 该接口**要求登录**：无 `token` 或 token 无效时返回明文业务错误
   `{"code":20105,"message":"token校验异常：access_token非法 Token无效"}`。
-- 同步结果只进入 Rust 内存扫描集合，不写本地 JSON，不随仓库分发。
+- Android 端同步结果只进入 Rust 内存扫描集合，不写本地 JSON，不随仓库分发。
+  Web 调试台的本地 SQLite 缓存见 [`crates/motu-web/README.md`](../../crates/motu-web/README.md)，
+  同样只保留在本机、可随时清空。
 
 ## 线上验证
 

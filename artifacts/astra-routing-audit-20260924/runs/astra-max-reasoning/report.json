@@ -1,0 +1,163 @@
+{
+  "name": "astra-max-reasoning",
+  "model": "gpt-6-astra",
+  "effort": "max",
+  "task": "reasoning",
+  "configMode": "clean",
+  "startedAt": "2026-09-24T08:56:11.388Z",
+  "prompt": "Without using tools or reading files: count the permutations of 1,2,...,8 in which no two even numbers are adjacent. Give the result and a short derivation.",
+  "cliVersion": "0.156.0",
+  "responses": [
+    {
+      "id": "resp_04ec2debbf3173cb016ab4e5af8c1487d29ee5721f773831fa",
+      "events": [
+        "response.created",
+        "response.in_progress",
+        "response.completed"
+      ],
+      "models": [
+        "gpt-6-astra"
+      ],
+      "model": "gpt-6-astra",
+      "created_at": 1790240175,
+      "status": "completed",
+      "service_tier": "auto",
+      "incomplete_details": null,
+      "usage": {
+        "input_tokens": 12371,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 12371
+      },
+      "reasoning": {
+        "effort": "max"
+      },
+      "outputItems": 0
+    },
+    {
+      "id": "resp_04ec2debbf3173cb016ab4e5b21f2087d29ddc2991ac02e041",
+      "events": [
+        "response.created",
+        "response.in_progress",
+        "response.completed"
+      ],
+      "models": [
+        "gpt-6-astra"
+      ],
+      "model": "gpt-6-astra",
+      "created_at": 1790240178,
+      "status": "completed",
+      "service_tier": "default",
+      "incomplete_details": null,
+      "usage": {
+        "input_tokens": 15491,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 12160
+        },
+        "output_tokens": 239,
+        "output_tokens_details": {
+          "reasoning_tokens": 152
+        },
+        "total_tokens": 15730
+      },
+      "reasoning": {
+        "effort": "max"
+      },
+      "outputItems": 0
+    }
+  ],
+  "handshakes": [
+    {
+      "headerNames": [
+        "date",
+        "connection",
+        "upgrade",
+        "sec-websocket-accept",
+        "sec-websocket-extensions",
+        "server",
+        "x-models-etag",
+        "x-openai-proxy-wasm",
+        "cf-cache-status",
+        "strict-transport-security",
+        "x-content-type-options",
+        "report-to",
+        "nel",
+        "referrer-policy",
+        "cross-origin-opener-policy",
+        "cf-ray"
+      ],
+      "headers": {
+        "date": "Thu, 24 Sep 2026 08:56:14 GMT",
+        "sec-websocket-extensions": "permessage-deflate",
+        "server": "cloudflare"
+      }
+    }
+  ],
+  "connections": [
+    "wss://chatgpt.com/backend-api/codex/responses"
+  ],
+  "eventCounts": {
+    "codex.rate_limits": 2,
+    "codex.response.metadata": 2,
+    "response.created": 2,
+    "response.in_progress": 2,
+    "responsesapi.websocket_timing": 2,
+    "response.completed": 2,
+    "response.output_item.added": 2,
+    "response.output_item.done": 2,
+    "response.content_part.added": 1,
+    "response.output_text.delta": 81,
+    "response.output_text.done": 1,
+    "response.content_part.done": 1
+  },
+  "errorCodes": [],
+  "observations": [],
+  "parseErrors": 0,
+  "rawLogsPersisted": false,
+  "command": {
+    "binary": "codex",
+    "args": [
+      "exec",
+      "--ephemeral",
+      "-s",
+      "read-only",
+      "--skip-git-repo-check",
+      "--color",
+      "never",
+      "--json",
+      "-C",
+      "/Users/bobo/Documents/bobo/Manis-road/artifacts/astra-routing-audit-20260924/work",
+      "-m",
+      "gpt-6-astra",
+      "-c",
+      "model_reasoning_effort=\"max\"",
+      "-c",
+      "service_tier=\"default\"",
+      "-c",
+      "notify=[]",
+      "--ignore-user-config",
+      "Without using tools or reading files: count the permutations of 1,2,...,8 in which no two even numbers are adjacent. Give the result and a short derivation."
+    ]
+  },
+  "configSha256": "31ac0243272810f05478b6633bd81f85c1115586c35bf9a9ea54efaad6f38283",
+  "cliUsage": {
+    "input_tokens": 15491,
+    "cached_input_tokens": 12160,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 239,
+    "reasoning_output_tokens": 152
+  },
+  "endedAt": "2026-09-24T08:56:37.443Z",
+  "exitCode": 0,
+  "signal": null,
+  "timedOut": false,
+  "modelMismatch": false,
+  "completedResponses": 2
+}

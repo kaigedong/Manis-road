@@ -1,0 +1,800 @@
+{
+  "generatedAt": "2026-09-24T08:58:40.824Z",
+  "startedAt": "2026-09-24T08:51:46.676Z",
+  "endedAt": "2026-09-24T08:58:33.407Z",
+  "cliVersion": "0.156.0",
+  "authentication": "ChatGPT OAuth",
+  "endpoint": "wss://chatgpt.com/backend-api/codex/responses",
+  "formalRequests": 10,
+  "warmups": 10,
+  "astraFormal": 8,
+  "lunaControls": 2,
+  "mismatches": 0,
+  "astraFormalCompleted": 8,
+  "lunaFormalCompleted": 2,
+  "astraWithLunaFasterModel": 8,
+  "upgradeResponses": 10,
+  "upgradeOpenaiModelCount": 0,
+  "serverMetadataOpenaiModelCount": 0,
+  "formalReportedTokens": {
+    "input": 156423,
+    "output": 4426,
+    "reasoning": 1845
+  },
+  "warmupReportedTokens": {
+    "input": 123122,
+    "output": 0,
+    "reasoning": 0
+  },
+  "configUnchanged": true,
+  "unparsedNonJsonFrames": [
+    {
+      "kind": "unparsed_event_shape",
+      "shape": "2026-09-24T08:55:12.696541Z TRACE tungstenite::protocol: Received message Binary Data<length=4>"
+    },
+    {
+      "kind": "unparsed_event_shape",
+      "shape": "2026-09-24T08:55:48.758775Z TRACE tungstenite::protocol: Received message Binary Data<length=4>"
+    },
+    {
+      "kind": "unparsed_event_shape",
+      "shape": "2026-09-24T08:57:00.448743Z TRACE tungstenite::protocol: Received message CD\\u{80}"
+    },
+    {
+      "kind": "unparsed_event_shape",
+      "shape": "2026-09-24T08:57:20.697524Z TRACE tungstenite::protocol: Received message Binary Data<length=4>"
+    },
+    {
+      "kind": "unparsed_event_shape",
+      "shape": "2026-09-24T08:57:40.948153Z TRACE tungstenite::protocol: Received message Binary Data<length=4>"
+    }
+  ],
+  "rows": [
+    {
+      "test": "astra-high-smoke",
+      "effort": "high",
+      "task": "pong",
+      "configMode": "inherit",
+      "requestedModel": "gpt-6-astra",
+      "responseId": "resp_0681b4e8548e424e016ab4e4a8aa3087d2851d47e89ffbab4f",
+      "headers": {
+        "x-codex-safety-buffering-enabled": "true",
+        "x-codex-safety-buffering-faster-model": "gpt-5.6-luna"
+      },
+      "createdObservedAt": "2026-09-24T08:51:52.977Z",
+      "modelAtCreated": "gpt-6-astra",
+      "completedObservedAt": "2026-09-24T08:51:53.169Z",
+      "modelAtCompleted": "gpt-6-astra",
+      "warmup": true,
+      "phaseEvidence": "inferred from order and zero output; initial smoke lacked timing trace",
+      "models": [
+        "gpt-6-astra"
+      ],
+      "status": "completed",
+      "usage": {
+        "input_tokens": 13212,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 13212
+      },
+      "mismatch": false,
+      "exitCode": 0,
+      "timedOut": false
+    },
+    {
+      "test": "astra-high-smoke",
+      "effort": "high",
+      "task": "pong",
+      "configMode": "inherit",
+      "requestedModel": "gpt-6-astra",
+      "responseId": "resp_0681b4e8548e424e016ab4e4aafb4087d283f895b877c383f4",
+      "headers": {
+        "x-codex-safety-buffering-enabled": "true",
+        "x-codex-safety-buffering-faster-model": "gpt-5.6-luna"
+      },
+      "createdObservedAt": "2026-09-24T08:51:55.174Z",
+      "modelAtCreated": "gpt-6-astra",
+      "completedObservedAt": "2026-09-24T08:51:57.008Z",
+      "modelAtCompleted": "gpt-6-astra",
+      "warmup": false,
+      "phaseEvidence": "inferred from order and zero output; initial smoke lacked timing trace",
+      "models": [
+        "gpt-6-astra"
+      ],
+      "status": "completed",
+      "usage": {
+        "input_tokens": 17093,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 13056
+        },
+        "output_tokens": 5,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 17098
+      },
+      "mismatch": false,
+      "exitCode": 0,
+      "timedOut": false
+    },
+    {
+      "test": "astra-high-reasoning",
+      "effort": "high",
+      "task": "reasoning",
+      "configMode": "inherit",
+      "requestedModel": "gpt-6-astra",
+      "responseId": "resp_0685c4c30408f5ec016ab4e4f43c6887d1a5ce604ad065b3ce",
+      "headers": {
+        "x-codex-safety-buffering-enabled": "true",
+        "x-codex-safety-buffering-faster-model": "gpt-5.6-luna"
+      },
+      "createdObservedAt": "2026-09-24T08:53:08.582Z",
+      "modelAtCreated": "gpt-6-astra",
+      "warmup": true,
+      "requestedModelFromClient": "gpt-6-astra",
+      "phaseEvidence": "client request timing",
+      "completedObservedAt": "2026-09-24T08:53:08.781Z",
+      "modelAtCompleted": "gpt-6-astra",
+      "models": [
+        "gpt-6-astra"
+      ],
+      "status": "completed",
+      "usage": {
+        "input_tokens": 13212,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 13212
+      },
+      "mismatch": false,
+      "exitCode": 0,
+      "timedOut": false
+    },
+    {
+      "test": "astra-high-reasoning",
+      "effort": "high",
+      "task": "reasoning",
+      "configMode": "inherit",
+      "requestedModel": "gpt-6-astra",
+      "responseId": "resp_0685c4c30408f5ec016ab4e4f6779c87d19551faeb18c32872",
+      "headers": {
+        "x-codex-safety-buffering-enabled": "true",
+        "x-codex-safety-buffering-faster-model": "gpt-5.6-luna"
+      },
+      "createdObservedAt": "2026-09-24T08:53:10.663Z",
+      "modelAtCreated": "gpt-6-astra",
+      "warmup": false,
+      "requestedModelFromClient": "gpt-6-astra",
+      "phaseEvidence": "client request timing",
+      "completedObservedAt": "2026-09-24T08:53:15.741Z",
+      "modelAtCompleted": "gpt-6-astra",
+      "models": [
+        "gpt-6-astra"
+      ],
+      "status": "completed",
+      "usage": {
+        "input_tokens": 17112,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 13056
+        },
+        "output_tokens": 116,
+        "output_tokens_details": {
+          "reasoning_tokens": 28
+        },
+        "total_tokens": 17228
+      },
+      "mismatch": false,
+      "exitCode": 0,
+      "timedOut": false
+    },
+    {
+      "test": "luna-control-before",
+      "effort": "high",
+      "task": "pong",
+      "configMode": "clean",
+      "requestedModel": "gpt-5.6-luna",
+      "responseId": "resp_05190d0ca5c94e2e016ab4e538ed0487d1bdb7eba03ca44eb3",
+      "headers": {},
+      "createdObservedAt": "2026-09-24T08:54:17.135Z",
+      "modelAtCreated": "gpt-5.6-luna",
+      "warmup": true,
+      "requestedModelFromClient": "gpt-5.6-luna",
+      "phaseEvidence": "client request timing",
+      "completedObservedAt": "2026-09-24T08:54:17.514Z",
+      "modelAtCompleted": "gpt-5.6-luna",
+      "models": [
+        "gpt-5.6-luna"
+      ],
+      "status": "completed",
+      "usage": {
+        "input_tokens": 10395,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 10395
+      },
+      "mismatch": false,
+      "exitCode": 0,
+      "timedOut": false
+    },
+    {
+      "test": "luna-control-before",
+      "effort": "high",
+      "task": "pong",
+      "configMode": "clean",
+      "requestedModel": "gpt-5.6-luna",
+      "responseId": "resp_05190d0ca5c94e2e016ab4e53b0c9487d194b94fae76266bf2",
+      "headers": {},
+      "createdObservedAt": "2026-09-24T08:54:19.246Z",
+      "modelAtCreated": "gpt-5.6-luna",
+      "warmup": false,
+      "requestedModelFromClient": "gpt-5.6-luna",
+      "phaseEvidence": "client request timing",
+      "completedObservedAt": "2026-09-24T08:54:20.414Z",
+      "modelAtCompleted": "gpt-5.6-luna",
+      "models": [
+        "gpt-5.6-luna"
+      ],
+      "status": "completed",
+      "usage": {
+        "input_tokens": 13076,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 9984
+        },
+        "output_tokens": 5,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 13081
+      },
+      "mismatch": false,
+      "exitCode": 0,
+      "timedOut": false
+    },
+    {
+      "test": "astra-low-pong",
+      "effort": "low",
+      "task": "pong",
+      "configMode": "clean",
+      "requestedModel": "gpt-6-astra",
+      "responseId": "resp_0cbbce52a74ecd81016ab4e54acfc487d2bb7804430a3eb76b",
+      "headers": {
+        "x-codex-safety-buffering-enabled": "true",
+        "x-codex-safety-buffering-faster-model": "gpt-5.6-luna"
+      },
+      "createdObservedAt": "2026-09-24T08:54:35.080Z",
+      "modelAtCreated": "gpt-6-astra",
+      "warmup": true,
+      "requestedModelFromClient": "gpt-6-astra",
+      "phaseEvidence": "client request timing",
+      "completedObservedAt": "2026-09-24T08:54:36.157Z",
+      "modelAtCompleted": "gpt-6-astra",
+      "models": [
+        "gpt-6-astra"
+      ],
+      "status": "completed",
+      "usage": {
+        "input_tokens": 12371,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 12371
+      },
+      "mismatch": false,
+      "exitCode": 0,
+      "timedOut": false
+    },
+    {
+      "test": "astra-low-pong",
+      "effort": "low",
+      "task": "pong",
+      "configMode": "clean",
+      "requestedModel": "gpt-6-astra",
+      "responseId": "resp_0cbbce52a74ecd81016ab4e54e163087d29cecb35e0714c175",
+      "headers": {
+        "x-codex-safety-buffering-enabled": "true",
+        "x-codex-safety-buffering-faster-model": "gpt-5.6-luna"
+      },
+      "createdObservedAt": "2026-09-24T08:54:38.290Z",
+      "modelAtCreated": "gpt-6-astra",
+      "warmup": false,
+      "requestedModelFromClient": "gpt-6-astra",
+      "phaseEvidence": "client request timing",
+      "completedObservedAt": "2026-09-24T08:54:39.811Z",
+      "modelAtCompleted": "gpt-6-astra",
+      "models": [
+        "gpt-6-astra"
+      ],
+      "status": "completed",
+      "usage": {
+        "input_tokens": 15472,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 12160
+        },
+        "output_tokens": 5,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 15477
+      },
+      "mismatch": false,
+      "exitCode": 0,
+      "timedOut": false
+    },
+    {
+      "test": "astra-high-coding",
+      "effort": "high",
+      "task": "coding",
+      "configMode": "inherit",
+      "requestedModel": "gpt-6-astra",
+      "responseId": "resp_0f61176b4a087026016ab4e55d62d487d1add6b0ebd3b63a02",
+      "headers": {
+        "x-codex-safety-buffering-enabled": "true",
+        "x-codex-safety-buffering-faster-model": "gpt-5.6-luna"
+      },
+      "createdObservedAt": "2026-09-24T08:54:53.648Z",
+      "modelAtCreated": "gpt-6-astra",
+      "warmup": true,
+      "requestedModelFromClient": "gpt-6-astra",
+      "phaseEvidence": "client request timing",
+      "completedObservedAt": "2026-09-24T08:54:53.868Z",
+      "modelAtCompleted": "gpt-6-astra",
+      "models": [
+        "gpt-6-astra"
+      ],
+      "status": "completed",
+      "usage": {
+        "input_tokens": 13212,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 13212
+      },
+      "mismatch": false,
+      "exitCode": 0,
+      "timedOut": false
+    },
+    {
+      "test": "astra-high-coding",
+      "effort": "high",
+      "task": "coding",
+      "configMode": "inherit",
+      "requestedModel": "gpt-6-astra",
+      "responseId": "resp_0f61176b4a087026016ab4e55f967087d1ad8c1680b565cb2c",
+      "headers": {
+        "x-codex-safety-buffering-enabled": "true",
+        "x-codex-safety-buffering-faster-model": "gpt-5.6-luna"
+      },
+      "createdObservedAt": "2026-09-24T08:54:55.783Z",
+      "modelAtCreated": "gpt-6-astra",
+      "warmup": false,
+      "requestedModelFromClient": "gpt-6-astra",
+      "phaseEvidence": "client request timing",
+      "completedObservedAt": "2026-09-24T08:55:13.446Z",
+      "modelAtCompleted": "gpt-6-astra",
+      "models": [
+        "gpt-6-astra"
+      ],
+      "status": "completed",
+      "usage": {
+        "input_tokens": 17049,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 13056
+        },
+        "output_tokens": 482,
+        "output_tokens_details": {
+          "reasoning_tokens": 170
+        },
+        "total_tokens": 17531
+      },
+      "mismatch": false,
+      "exitCode": 0,
+      "timedOut": false
+    },
+    {
+      "test": "astra-xhigh-coding",
+      "effort": "xhigh",
+      "task": "coding",
+      "configMode": "clean",
+      "requestedModel": "gpt-6-astra",
+      "responseId": "resp_0c58c175ba374772016ab4e58151f487d2ae4a07b3bcb2266a",
+      "headers": {
+        "x-codex-safety-buffering-enabled": "true",
+        "x-codex-safety-buffering-faster-model": "gpt-5.6-luna"
+      },
+      "createdObservedAt": "2026-09-24T08:55:29.620Z",
+      "modelAtCreated": "gpt-6-astra",
+      "warmup": true,
+      "requestedModelFromClient": "gpt-6-astra",
+      "phaseEvidence": "client request timing",
+      "completedObservedAt": "2026-09-24T08:55:29.816Z",
+      "modelAtCompleted": "gpt-6-astra",
+      "models": [
+        "gpt-6-astra"
+      ],
+      "status": "completed",
+      "usage": {
+        "input_tokens": 12371,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 12371
+      },
+      "mismatch": false,
+      "exitCode": 0,
+      "timedOut": false
+    },
+    {
+      "test": "astra-xhigh-coding",
+      "effort": "xhigh",
+      "task": "coding",
+      "configMode": "clean",
+      "requestedModel": "gpt-6-astra",
+      "responseId": "resp_0c58c175ba374772016ab4e5839bfc87d2a7390dcc1c7013fe",
+      "headers": {
+        "x-codex-safety-buffering-enabled": "true",
+        "x-codex-safety-buffering-faster-model": "gpt-5.6-luna"
+      },
+      "createdObservedAt": "2026-09-24T08:55:31.795Z",
+      "modelAtCreated": "gpt-6-astra",
+      "warmup": false,
+      "requestedModelFromClient": "gpt-6-astra",
+      "phaseEvidence": "client request timing",
+      "completedObservedAt": "2026-09-24T08:56:04.592Z",
+      "modelAtCompleted": "gpt-6-astra",
+      "models": [
+        "gpt-6-astra"
+      ],
+      "status": "completed",
+      "usage": {
+        "input_tokens": 15530,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 12160
+        },
+        "output_tokens": 1048,
+        "output_tokens_details": {
+          "reasoning_tokens": 736
+        },
+        "total_tokens": 16578
+      },
+      "mismatch": false,
+      "exitCode": 0,
+      "timedOut": false
+    },
+    {
+      "test": "astra-max-reasoning",
+      "effort": "max",
+      "task": "reasoning",
+      "configMode": "clean",
+      "requestedModel": "gpt-6-astra",
+      "responseId": "resp_04ec2debbf3173cb016ab4e5af8c1487d29ee5721f773831fa",
+      "headers": {
+        "x-codex-safety-buffering-enabled": "true",
+        "x-codex-safety-buffering-faster-model": "gpt-5.6-luna"
+      },
+      "createdObservedAt": "2026-09-24T08:56:15.806Z",
+      "modelAtCreated": "gpt-6-astra",
+      "warmup": true,
+      "requestedModelFromClient": "gpt-6-astra",
+      "phaseEvidence": "client request timing",
+      "completedObservedAt": "2026-09-24T08:56:15.994Z",
+      "modelAtCompleted": "gpt-6-astra",
+      "models": [
+        "gpt-6-astra"
+      ],
+      "status": "completed",
+      "usage": {
+        "input_tokens": 12371,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 12371
+      },
+      "mismatch": false,
+      "exitCode": 0,
+      "timedOut": false
+    },
+    {
+      "test": "astra-max-reasoning",
+      "effort": "max",
+      "task": "reasoning",
+      "configMode": "clean",
+      "requestedModel": "gpt-6-astra",
+      "responseId": "resp_04ec2debbf3173cb016ab4e5b21f2087d29ddc2991ac02e041",
+      "headers": {
+        "x-codex-safety-buffering-enabled": "true",
+        "x-codex-safety-buffering-faster-model": "gpt-5.6-luna"
+      },
+      "createdObservedAt": "2026-09-24T08:56:18.830Z",
+      "modelAtCreated": "gpt-6-astra",
+      "warmup": false,
+      "requestedModelFromClient": "gpt-6-astra",
+      "phaseEvidence": "client request timing",
+      "completedObservedAt": "2026-09-24T08:56:27.704Z",
+      "modelAtCompleted": "gpt-6-astra",
+      "models": [
+        "gpt-6-astra"
+      ],
+      "status": "completed",
+      "usage": {
+        "input_tokens": 15491,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 12160
+        },
+        "output_tokens": 239,
+        "output_tokens_details": {
+          "reasoning_tokens": 152
+        },
+        "total_tokens": 15730
+      },
+      "mismatch": false,
+      "exitCode": 0,
+      "timedOut": false
+    },
+    {
+      "test": "astra-high-long",
+      "effort": "high",
+      "task": "long",
+      "configMode": "clean",
+      "requestedModel": "gpt-6-astra",
+      "responseId": "resp_08e166f90d96ab60016ab4e5c9289487d2a78e950042c0ed98",
+      "headers": {
+        "x-codex-safety-buffering-enabled": "true",
+        "x-codex-safety-buffering-faster-model": "gpt-5.6-luna"
+      },
+      "createdObservedAt": "2026-09-24T08:56:41.455Z",
+      "modelAtCreated": "gpt-6-astra",
+      "warmup": true,
+      "requestedModelFromClient": "gpt-6-astra",
+      "phaseEvidence": "client request timing",
+      "completedObservedAt": "2026-09-24T08:56:41.644Z",
+      "modelAtCompleted": "gpt-6-astra",
+      "models": [
+        "gpt-6-astra"
+      ],
+      "status": "completed",
+      "usage": {
+        "input_tokens": 12371,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 12371
+      },
+      "mismatch": false,
+      "exitCode": 0,
+      "timedOut": false
+    },
+    {
+      "test": "astra-high-long",
+      "effort": "high",
+      "task": "long",
+      "configMode": "clean",
+      "requestedModel": "gpt-6-astra",
+      "responseId": "resp_08e166f90d96ab60016ab4e5cc51f887d289c9c4f23130ce46",
+      "headers": {
+        "x-codex-safety-buffering-enabled": "true",
+        "x-codex-safety-buffering-faster-model": "gpt-5.6-luna"
+      },
+      "createdObservedAt": "2026-09-24T08:56:44.541Z",
+      "modelAtCreated": "gpt-6-astra",
+      "warmup": false,
+      "requestedModelFromClient": "gpt-6-astra",
+      "phaseEvidence": "client request timing",
+      "completedObservedAt": "2026-09-24T08:57:56.375Z",
+      "modelAtCompleted": "gpt-6-astra",
+      "models": [
+        "gpt-6-astra"
+      ],
+      "status": "completed",
+      "usage": {
+        "input_tokens": 15514,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 12160
+        },
+        "output_tokens": 2350,
+        "output_tokens_details": {
+          "reasoning_tokens": 691
+        },
+        "total_tokens": 17864
+      },
+      "mismatch": false,
+      "exitCode": 0,
+      "timedOut": false
+    },
+    {
+      "test": "astra-high-repeat",
+      "effort": "high",
+      "task": "pong",
+      "configMode": "inherit",
+      "requestedModel": "gpt-6-astra",
+      "responseId": "resp_0e96648417fcd67f016ab4e61a348087d2bda59dd43f2e3447",
+      "headers": {
+        "x-codex-safety-buffering-enabled": "true",
+        "x-codex-safety-buffering-faster-model": "gpt-5.6-luna"
+      },
+      "createdObservedAt": "2026-09-24T08:58:02.480Z",
+      "modelAtCreated": "gpt-6-astra",
+      "warmup": true,
+      "requestedModelFromClient": "gpt-6-astra",
+      "phaseEvidence": "client request timing",
+      "completedObservedAt": "2026-09-24T08:58:02.685Z",
+      "modelAtCompleted": "gpt-6-astra",
+      "models": [
+        "gpt-6-astra"
+      ],
+      "status": "completed",
+      "usage": {
+        "input_tokens": 13212,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 13212
+      },
+      "mismatch": false,
+      "exitCode": 0,
+      "timedOut": false
+    },
+    {
+      "test": "astra-high-repeat",
+      "effort": "high",
+      "task": "pong",
+      "configMode": "inherit",
+      "requestedModel": "gpt-6-astra",
+      "responseId": "resp_0e96648417fcd67f016ab4e61c918c87d2b048b9c3c6114551",
+      "headers": {
+        "x-codex-safety-buffering-enabled": "true",
+        "x-codex-safety-buffering-faster-model": "gpt-5.6-luna"
+      },
+      "createdObservedAt": "2026-09-24T08:58:04.757Z",
+      "modelAtCreated": "gpt-6-astra",
+      "warmup": false,
+      "requestedModelFromClient": "gpt-6-astra",
+      "phaseEvidence": "client request timing",
+      "completedObservedAt": "2026-09-24T08:58:06.762Z",
+      "modelAtCompleted": "gpt-6-astra",
+      "models": [
+        "gpt-6-astra"
+      ],
+      "status": "completed",
+      "usage": {
+        "input_tokens": 16991,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 13056
+        },
+        "output_tokens": 5,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 16996
+      },
+      "mismatch": false,
+      "exitCode": 0,
+      "timedOut": false
+    },
+    {
+      "test": "luna-control-after",
+      "effort": "high",
+      "task": "reasoning",
+      "configMode": "clean",
+      "requestedModel": "gpt-5.6-luna",
+      "responseId": "resp_05580c8605739649016ab4e62e86f087d2b2e1b0582b1923a8",
+      "headers": {},
+      "createdObservedAt": "2026-09-24T08:58:22.751Z",
+      "modelAtCreated": "gpt-5.6-luna",
+      "warmup": true,
+      "requestedModelFromClient": "gpt-5.6-luna",
+      "phaseEvidence": "client request timing",
+      "completedObservedAt": "2026-09-24T08:58:22.822Z",
+      "modelAtCompleted": "gpt-5.6-luna",
+      "models": [
+        "gpt-5.6-luna"
+      ],
+      "status": "completed",
+      "usage": {
+        "input_tokens": 10395,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 10395
+      },
+      "mismatch": false,
+      "exitCode": 0,
+      "timedOut": false
+    },
+    {
+      "test": "luna-control-after",
+      "effort": "high",
+      "task": "reasoning",
+      "configMode": "clean",
+      "requestedModel": "gpt-5.6-luna",
+      "responseId": "resp_05580c8605739649016ab4e6308b2c87d2944339c5e12704e9",
+      "headers": {},
+      "createdObservedAt": "2026-09-24T08:58:24.737Z",
+      "modelAtCreated": "gpt-5.6-luna",
+      "warmup": false,
+      "requestedModelFromClient": "gpt-5.6-luna",
+      "phaseEvidence": "client request timing",
+      "completedObservedAt": "2026-09-24T08:58:28.451Z",
+      "modelAtCompleted": "gpt-5.6-luna",
+      "models": [
+        "gpt-5.6-luna"
+      ],
+      "status": "completed",
+      "usage": {
+        "input_tokens": 13095,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 9984
+        },
+        "output_tokens": 171,
+        "output_tokens_details": {
+          "reasoning_tokens": 68
+        },
+        "total_tokens": 13266
+      },
+      "mismatch": false,
+      "exitCode": 0,
+      "timedOut": false
+    }
+  ]
+}

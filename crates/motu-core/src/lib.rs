@@ -13,7 +13,10 @@
 #![allow(clippy::missing_errors_doc)]
 
 pub mod api;
+pub mod areas;
 pub mod auth;
+#[cfg(feature = "cache")]
+pub mod cache;
 pub mod camera;
 pub mod crypto;
 pub mod error;
@@ -23,13 +26,19 @@ pub mod official;
 pub mod route;
 pub mod store;
 pub mod vehicle;
+mod wire_time;
 
 pub use api::{
     ALL_ENDPOINTS, BASE_URL, Endpoint, HeaderInit, HttpMethod, HttpResponse, SecurityClient,
     SignedRequest, Transport, base_headers, build_request, decode_envelope, endpoint_by_name,
     endpoints,
 };
+pub use areas::{MapAreaShape, MapAreaSnapshot, load_map_areas};
 pub use auth::{LoginOutcome, login, logout};
+#[cfg(feature = "cache")]
+pub use cache::{
+    CacheStats, CachedCamera, CachedDetail, CachedImage, CameraBounds, CameraCache, SyncRegion,
+};
 pub use camera::{CameraScanEngine, NaviLocation, ScanConfig, ScanResult};
 pub use crypto::{
     Aad, SecurityConfig, SecurityEnvelope, SecurityResponse, encrypt_md5, encrypt_md5_bytes,

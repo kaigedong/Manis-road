@@ -10,8 +10,11 @@
 
 #![allow(unsafe_code)]
 
-use std::sync::{Mutex, OnceLock};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    path::Path,
+    sync::{Mutex, OnceLock},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use jni::JNIEnv;
 use jni::objects::{JByteArray, JClass, JString};
@@ -26,13 +29,41 @@ use motu_core::{
     login as auth_login, logout as auth_logout, parse_amap_positions, safe_env_token,
     signing_certificate_md5, sync_official_cameras,
 };
+use motu_routing::{CameraDeterrent, RoadGraph, cameras_within};
 use serde_json::{Map, Value, json};
+
+/// Graph loaded on demand; Android keeps `graph.bin` in its files directory.
+struct LoadedGraph {
+    path: String,
+    graph: RoadGraph,
+}
 
 #[derive(Default)]
 struct FfiState {
     engine: CameraScanEngine,
     store: Option<FileStore>,
     core: CoreState,
+    graph: Option<LoadedGraph>,
+}
+
+fn graph_for<'a>(state: &'a mut FfiState, path: &str) -> Result<&'a RoadGraph, String> {
+    let path = path.trim();
+    if path.is_empty() {
+        return Err("graph path is empty".to_owned());
+    }
+    if state.graph.as_ref().is_some_and(|loaded| loaded.path == path) {
+        return Ok(&state
+            .graph
+            .as_ref()
+            .expect("checked above")
+            .graph);
+    }
+    let graph = RoadGraph::load(Path::new(path)).map_err(|error| error.to_string())?;
+    state.graph = Some(LoadedGraph {
+        path: path.to_owned(),
+        graph,
+    });
+    Ok(&state.graph.as_ref().expect("just loaded").graph)
 }
 
 static STATE: OnceLock<Mutex<FfiState>> = OnceLock::new();
@@ -366,6 +397,174 @@ pub extern "system" fn Java_com_manisroad_app_core_MotuCore_nativeRouteAudit(
         Ok(ok(
             serde_json::to_value(audit).map_err(|error| error.to_string())?
         ))
+    })();
+    jstring_out(&mut env, result.unwrap_or_else(err))
+}
+
+/// `nativeLoadGraph(graphPath)`: load (and cache) the offline road graph.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_manisroad_app_core_MotuCore_nativeLoadGraph(
+    mut env: JNIEnv,
+    _class: JClass,
+    path: JString,
+) -> jstring {
+    let result: Result<String, String> = (|| {
+        let path = string_arg(&mut env, &path)?;
+        let info = with_state(|state| {
+            let graph = graph_for(state, &path)?;
+            Ok(json!({
+                "path": path,
+                "nodes": graph.node_count(),
+                "edges": graph.edge_count(),
+                "bounds": graph.bounds(),
+            }))
+        })?;
+        Ok(ok(info))
+    })();
+    jstring_out(&mut env, result.unwrap_or_else(err))
+}
+
+/// `nativeRoute(graphPath, originLat, originLon, destinationLat, destinationLon)`.
+///
+/// Fully offline: loads `graph.bin` once, then A* in memory.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_manisroad_app_core_MotuCore_nativeRoute(
+    mut env: JNIEnv,
+    _class: JClass,
+    path: JString,
+    origin_lat: jdouble,
+    origin_lon: jdouble,
+    destination_lat: jdouble,
+    destination_lon: jdouble,
+) -> jstring {
+    let result: Result<String, String> = (|| {
+        let path = string_arg(&mut env, &path)?;
+        let origin = LatLng::new(origin_lat, origin_lon);
+        let destination = LatLng::new(destination_lat, destination_lon);
+        let plan = with_state(|state| {
+            let graph = graph_for(state, &path)?;
+            graph
+                .route(origin, destination)
+                .map_err(|error| error.to_string())
+        })?;
+        Ok(ok(
+            serde_json::to_value(plan).map_err(|error| error.to_string())?
+        ))
+    })();
+    jstring_out(&mut env, result.unwrap_or_else(err))
+}
+
+/// Build a route that penalises nodes near the supplied WGS-84 cameras.
+fn route_avoiding_json(
+    graph_path: &str,
+    origin: LatLng,
+    destination: LatLng,
+    cameras_json: &str,
+    radius_m: f64,
+    _max_ratio: f64,
+    _max_minutes: f64,
+) -> Result<Value, String> {
+    let cameras: Vec<TrafficCamera> = parse_json(cameras_json, "cameras")?;
+    let points: Vec<LatLng> = cameras.iter().map(|camera| camera.position).collect();
+    let radius = radius_m.clamp(20.0, 300.0);
+    with_state(|state| {
+        let graph = graph_for(state, graph_path)?;
+        let baseline = graph
+            .route(origin, destination)
+            .map_err(|error| error.to_string())?;
+        let before = cameras_within(&baseline.points, &points, radius);
+        if before == 0 {
+            return Ok(json!({
+                "plan": baseline,
+                "avoidance": {
+                    "applied": false,
+                    "rejected": false,
+                    "reason": format!("本路线 {radius:.0} m 内没有已知点位"),
+                    "camerasBefore": 0,
+                    "camerasAfter": 0,
+                    "radiusM": radius,
+                    "detourRatio": 0.0,
+                    "extraSeconds": 0.0,
+                }
+            }));
+        }
+        // Hard avoidance first; if the graph is disconnected, fall back to a
+        // very high time penalty. Never return a route that cannot reduce the
+        // known hits.
+        let hard = CameraDeterrent::build_hard(graph, &points, radius);
+        let candidate = match graph.route_with(origin, destination, Some(&hard)) {
+            Ok(candidate) => candidate,
+            Err(_) => {
+                let soft = CameraDeterrent::build(graph, &points, radius, 50.0);
+                match graph.route_with(origin, destination, Some(&soft)) {
+                    Ok(candidate) => candidate,
+                    Err(error) => {
+                        return Err(format!(
+                            "强制避开电子眼后无可行路线（{error}）；可减小半径或取消勾选"
+                        ));
+                    }
+                }
+            }
+        };
+        let after = cameras_within(&candidate.points, &points, radius);
+        if after >= before {
+            return Err(format!(
+                "强制避开电子眼后仍有 {after} 个已知点位，无法减少；可减小半径或取消勾选"
+            ));
+        }
+        let extra = candidate.duration_s - baseline.duration_s;
+        let ratio = if baseline.duration_s > 0.0 {
+            extra / baseline.duration_s
+        } else {
+            0.0
+        };
+        let reason = (after > 0).then(|| {
+            format!("无法完全避开，仍有 {after} 个已知点位")
+        });
+        Ok(json!({
+            "plan": candidate,
+            "avoidance": {
+                "applied": true,
+                "rejected": false,
+                "reason": reason,
+                "camerasBefore": before,
+                "camerasAfter": after,
+                "radiusM": radius,
+                "detourRatio": ratio,
+                "extraSeconds": extra,
+            }
+        }))
+    })
+}
+
+/// `nativeRouteAvoiding(graphPath, oLat, oLon, dLat, dLon, camerasJson, radiusM, maxRatio, maxMinutes)`.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_manisroad_app_core_MotuCore_nativeRouteAvoiding(
+    mut env: JNIEnv,
+    _class: JClass,
+    path: JString,
+    origin_lat: jdouble,
+    origin_lon: jdouble,
+    destination_lat: jdouble,
+    destination_lon: jdouble,
+    cameras_json: JString,
+    radius_m: jdouble,
+    max_ratio: jdouble,
+    max_minutes: jdouble,
+) -> jstring {
+    let result: Result<String, String> = (|| {
+        let path = string_arg(&mut env, &path)?;
+        let cameras = string_arg(&mut env, &cameras_json)?;
+        let value = route_avoiding_json(
+            &path,
+            LatLng::new(origin_lat, origin_lon),
+            LatLng::new(destination_lat, destination_lon),
+            &cameras,
+            radius_m,
+            max_ratio,
+            max_minutes,
+        )?;
+        Ok(ok(value))
     })();
     jstring_out(&mut env, result.unwrap_or_else(err))
 }
@@ -788,6 +987,31 @@ pub extern "system" fn Java_com_manisroad_app_core_MotuCore_nativeLoadCameraDeta
 
 #[cfg(test)]
 mod tests {
+    use motu_routing::{GraphNode, RoadGraph};
+
+    #[test]
+    fn graph_cache_loads_and_reuses_a_file() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let path = directory.path().join("graph.bin");
+        let graph = RoadGraph {
+            nodes: vec![GraphNode {
+                id: 1,
+                lat: 31.2304,
+                lon: 121.4737,
+            }],
+            ways: Vec::new(),
+            offsets: vec![0, 0],
+            edges: Vec::new(),
+        };
+        graph.save(&path).expect("save");
+
+        let mut state = FfiState::default();
+        let text = path.to_str().expect("path");
+        assert_eq!(graph_for(&mut state, text).expect("load").node_count(), 1);
+        // Second call must reuse the cached graph rather than reloading.
+        assert_eq!(graph_for(&mut state, text).expect("cached").edge_count(), 0);
+    }
+
     use super::*;
 
     fn parse(text: &str) -> Value {

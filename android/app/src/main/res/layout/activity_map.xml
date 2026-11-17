@@ -67,6 +67,40 @@
             android:text="@string/turn" />
     </LinearLayout>
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/button_offline_route"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:minHeight="48dp"
+            android:text="@string/offline_route"
+            android:textAllCaps="false" />
+
+        <Button
+            android:id="@+id/button_gps"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:minHeight="48dp"
+            android:text="@string/gps_start"
+            android:textAllCaps="false" />
+    </LinearLayout>
+
+    <CheckBox
+        android:id="@+id/checkbox_avoid_cameras"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="@string/avoid_cameras"
+        android:textSize="13sp" />
+
     <Button
         android:id="@+id/button_sync_official"
         android:layout_width="match_parent"

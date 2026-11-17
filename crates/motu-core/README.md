@@ -12,7 +12,8 @@
 | `auth` | `SignInViewModel` / `IUserApiService` | 官方密码登录、退出、会话模型 |
 | `crypto` | `SecurityIntercepter` / `AppendEncryptionIntercepter` / `HmacUtil` | 大写 native MD5 签名、小写密码 MD5、AES-CBC 回退、AES-GCM、HMAC-SHA256、RSA-OAEP（MGF1-SHA1）、安全信封 |
 | `camera` | `com.motu.motumap.navi.camera.CameraScanEngine` | 前向电子眼扫描、聚类、提醒释放 |
-| `official` | `MotuMapViewModel.searchCameras` / `loadTrafficCameraDetail` | 登录后调用 `searchRulePoiSec` 获取点位，并调用 `trafficEyesDetailSec` / `trafficTicketListSec` 合并详情与罚单；只在内存中使用 |
+| `official` | `MotuMapViewModel.searchCameras` / `loadTrafficCameraDetail` | 登录后调用 `searchRulePoiSec` 获取点位，并调用 `trafficEyesDetailSec` / `trafficTicketListSec` 合并详情与罚单；本身不落盘 |
+| `cache` | Web 调试台的本地缓存（`cache` feature） | SQLite 存点位、详情与图片，按 TTL 复用；仅本机、git-ignored、可清空 |
 | `route` | `calPathAvoidSec` / `calPathAreaSec` | 避让区与电子眼的路线审计、polyline、AMap 坐标、离线直线规划 |
 | `vehicle` | 车辆表单与 `userCar` 接口 | 号牌解析、颜色/动力/变速枚举、校验 |
 | `store` | `SharedPreferences`/SQLite 的替代 | 单 JSON 文档持久化（原子写、schema 版本）、`deviceId` 与登录会话 |
@@ -23,7 +24,8 @@
 
 ```bash
 cargo test -p manis-motu-core
-cargo clippy -p manis-motu-core --all-targets --features http
+cargo clippy -p manis-motu-core --all-targets --features http,cache
+cargo test -p manis-motu-core --features cache
 ```
 
 离线验证请求构造：
@@ -38,7 +40,8 @@ let request = build_request(&endpoint, BASE_URL, &headers, &Default::default(), 
 ## 数据与合规
 
 - 不附带、不内置摩途的电子眼数据或用户上报数据；`camera`、`route` 只消费调用方
-  传入的点位，`official` 仅在登录后按需同步到内存。仓库内演示点位均为虚构坐标。
+  传入的点位，`official` 仅在登录后按需同步。启用 `cache` feature 时，调用方可把同步
+  结果存进本机 SQLite（`CameraCache`），数据不进入仓库；仓库内演示点位均为虚构坐标。
 - 线上调用只应使用使用者自己的账号和已授权资源；`build_request` 只构造请求，
   是否发送由调用方决定。
 - 登录密码只做协议要求的小写 MD5 后发送，不写入本地状态；本地只保存服务端返回的

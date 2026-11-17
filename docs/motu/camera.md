@@ -71,9 +71,10 @@
 `TrafficCamera`，用 `tabType[0]` 作为主类型；坐标无效的项会被丢弃。扫描引擎
 仍按 `memberByString`（否则 `lat,lon:typeId`）去重提醒。
 
-官方点位只保留在 Rust 的 `CameraScanEngine` 内存中，地图最多绘制 200 个标记，
-其余仍参与扫描；不写入 `motu-core-state.json`，也不随应用分发。重启应用后需要
-重新同步。同步前必须登录：未登录时服务端返回
+Android 端官方点位只保留在 Rust 的 `CameraScanEngine` 内存中，地图最多绘制 200
+个标记，其余仍参与扫描；不写入 `motu-core-state.json`，也不随应用分发，重启后
+需要重新同步。Web 调试台则在 `var/motu-web/cache.sqlite` 做本机缓存（见下节），
+两者共用同一套核心模型。同步前必须登录：未登录时服务端返回
 `{"code":20105,"message":"token校验异常：access_token非法 Token无效"}`。
 
 当前是手动一次性同步；原版会随地图视野/巡航自动刷新，自动刷新与巡航模式尚未
@@ -84,8 +85,14 @@
 [`crates/motu-web`](../../crates/motu-web/README.md) 把同一条链路暴露给浏览器：
 Leaflet 使用 OpenStreetMap（WGS-84）瓦片，Rust 在 `/api/sync` 里把地图中心
 转换回 GCJ-02 再请求 `searchRulePoiSec`，并把返回点位和详情坐标转换为 WGS-84
-后交给页面。登录令牌只保存在本机 Rust 服务，浏览器拿不到；官方点位仍只存在
-进程内存中。演示点位同样是虚构坐标，未登录时只能查看演示说明。
+后交给页面。页面在 `moveend`/`zoomend` 时用 `bbox` 只拉当前视野内的点位
+（本地 SQLite，实测 ~3 ms / 35 KB），视野外的点位仍留在库里；「同步官方点位」
+会带上当前视野，若已被一次成功同步的记录范围覆盖且未过期，则直接读缓存并返回
+`skipped: true`，Shift+点击才强制请求官方接口。登录令牌只保存在本机 Rust 服务，浏览器拿不到。点位、详情与图片
+以**缓存优先**的方式存进本机 SQLite（`var/motu-web/cache.sqlite`，git-ignored）：
+同一坐标再次查看不再请求官方接口，重启后仍然可用；该文件属于个人调试数据，
+不提交、不分发，可随时用页面底部「清空缓存」删除。演示点位是虚构坐标，未登录
+且无缓存时只能查看演示说明。
 
 ## 电子眼详情（`load_camera_detail`）
 
@@ -105,6 +112,23 @@ Leaflet 使用 OpenStreetMap（WGS-84）瓦片，Rust 在 `/api/sync` 里把地�
 Android 侧只负责点击命中、调用 `MotuCore.loadCameraDetail(cameraId, cert)` 和
 渲染底部弹窗；未登录或演示点位不会发起请求。当前实现为一次性加载，未做评论、
 白名单/避让操作或图片加载。
+
+## 限行区域（`mapShowAreaSec`）
+
+原版 `IPoiAPIService.mapArea()` 无请求体，响应 `MapAreaResult`：
+
+| 字段 | 含义 |
+|------|------|
+| `list[].id` / `name` | 区域 id 与名称（如「上海PC蓝牌限行区域」） |
+| `list[].shapeType` | `polygon` 或 `linestring`（路段） |
+| `list[].posEncode` | AMap polyline，坐标 **GCJ-02**，精度 **1e6** |
+| `version` | 图层版本号 |
+
+`MotuMapAreaSnapshot.fromResponse` 用 `PolylineUtil.decode` 解码（六位小数），
+多边形画面、折线画路段。Rust 侧对应 [`areas.rs`](../../crates/motu-core/src/areas.rs)：
+`load_map_areas` 走加密 `v1/poi/mapShowAreaSec`，逐条 `decode_polyline_scaled(_, 1e6)`，
+坏数据跳过；Web 端 `/api/areas` 缓存整层并把点转成 WGS-84，Leaflet 用红色虚线
+叠加在电子眼下方。实测当前图层 445 条（166 面 + 279 段）。
 
 ## 车辆（`Vehicle`）
 

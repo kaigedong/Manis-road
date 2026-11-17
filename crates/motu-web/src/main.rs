@@ -3,15 +3,16 @@ mod error;
 mod model;
 mod server;
 
-use std::{
-    process::ExitCode,
-    sync::{Arc, Mutex},
-};
+use std::{process::ExitCode, sync::Arc};
 
+use motu_routing::RoadGraph;
 use motu_core::FileStore;
 use tracing_subscriber::EnvFilter;
 
-use crate::{config::WebConfig, model::CameraSnapshot, server::AppState};
+use crate::{
+    config::{SignatureSource, WebConfig},
+    server::AppState,
+};
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -37,14 +38,36 @@ async fn run() -> Result<(), String> {
     store
         .ensure_root()
         .map_err(|error| format!("cannot create {}: {error}", config.data_dir.display()))?;
-    let core = store
+    store
         .ensure_identity()
         .map_err(|error| format!("cannot initialise local store: {error}"))?;
-    let snapshot = CameraSnapshot::demo(core.settings.city_code.clone());
+    let graph = if config.graph_path.is_file() {
+        match RoadGraph::load(&config.graph_path) {
+            Ok(graph) => {
+                tracing::info!(
+                    "offline graph: {} nodes, {} edges from {}",
+                    graph.node_count(),
+                    graph.edge_count(),
+                    config.graph_path.display()
+                );
+                Some(Arc::new(graph))
+            }
+            Err(error) => {
+                tracing::warn!("cannot load {}: {error}", config.graph_path.display());
+                None
+            }
+        }
+    } else {
+        tracing::warn!(
+            "no offline graph at {}; /api/route is disabled",
+            config.graph_path.display()
+        );
+        None
+    };
     let state = Arc::new(AppState {
         store,
         config: Arc::new(config.clone()),
-        cameras: Arc::new(Mutex::new(snapshot)),
+        graph,
     });
 
     let listener = tokio::net::TcpListener::bind(config.bind)
@@ -56,10 +79,9 @@ async fn run() -> Result<(), String> {
     tracing::info!(
         "Motu web debugger on http://{address} (data: {}, signature: {}, tiles: {})",
         config.data_dir.display(),
-        if config.signature_md5.is_empty() {
-            "not configured"
-        } else {
-            "configured"
+        match config.signature_source {
+            SignatureSource::None => "not configured".to_owned(),
+            source => format!("configured via {}", source.as_str()),
         },
         config.tile_url
     );

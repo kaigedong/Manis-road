@@ -87,6 +87,23 @@ pub struct CameraDetail {
     pub avoid: bool,
     #[serde(default)]
     pub avoid_type: i32,
+    /// Reporter fields carried by `TrafficCameraDetailResponse`.
+    #[serde(default)]
+    pub contact_person: String,
+    #[serde(default)]
+    pub contact_way: String,
+    /// Camera photo uploaded by the reporter, if any.
+    #[serde(default)]
+    pub photo: String,
+    /// Reporter avatar.
+    #[serde(default)]
+    pub user_photo: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub create_time: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub avoid_id: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub avoid_white_id: Option<i64>,
     #[serde(default)]
     pub tickets: Vec<CameraTicket>,
 }
@@ -134,6 +151,14 @@ pub struct CameraTicket {
     pub contact_person: String,
     #[serde(default)]
     pub user_photo: String,
+    #[serde(default)]
+    pub city_code: String,
+    #[serde(default)]
+    pub contact_way: String,
+    #[serde(default)]
+    pub eyes_id: i64,
+    #[serde(default)]
+    pub user_id: i64,
 }
 
 #[must_use]
@@ -398,6 +423,20 @@ struct CameraDetailWire {
     avoid: Option<BoolOrInt>,
     #[serde(default)]
     avoid_type: Option<i32>,
+    #[serde(default)]
+    contact_person: Option<String>,
+    #[serde(default)]
+    contact_way: Option<String>,
+    #[serde(default)]
+    photo: Option<String>,
+    #[serde(default)]
+    user_photo: Option<String>,
+    #[serde(default, deserialize_with = "crate::wire_time::option_millis")]
+    create_time: Option<i64>,
+    #[serde(default)]
+    avoid_id: Option<i64>,
+    #[serde(default)]
+    avoid_white_id: Option<i64>,
 }
 
 impl CameraDetailWire {
@@ -431,6 +470,13 @@ impl CameraDetailWire {
             white: self.white.is_some_and(|value| value.is_true()),
             avoid: self.avoid.is_some_and(|value| value.is_true()),
             avoid_type: self.avoid_type.unwrap_or(0),
+            contact_person: clean_text(self.contact_person),
+            contact_way: clean_text(self.contact_way),
+            photo: clean_text(self.photo),
+            user_photo: clean_text(self.user_photo),
+            create_time: self.create_time,
+            avoid_id: self.avoid_id,
+            avoid_white_id: self.avoid_white_id,
             tickets: Vec::new(),
         }
     }
@@ -519,12 +565,20 @@ struct TicketWire {
     remark: Option<String>,
     #[serde(default)]
     photo: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "crate::wire_time::option_millis")]
     create_date: Option<i64>,
     #[serde(default)]
     contact_person: Option<String>,
     #[serde(default)]
     user_photo: Option<String>,
+    #[serde(default)]
+    city_code: Option<String>,
+    #[serde(default)]
+    contact_way: Option<String>,
+    #[serde(default)]
+    eyes_id: Option<i64>,
+    #[serde(default)]
+    user_id: Option<i64>,
 }
 
 impl TicketWire {
@@ -537,6 +591,10 @@ impl TicketWire {
             create_date: self.create_date,
             contact_person: clean_text(self.contact_person),
             user_photo: clean_text(self.user_photo),
+            city_code: clean_text(self.city_code),
+            contact_way: clean_text(self.contact_way),
+            eyes_id: self.eyes_id.unwrap_or(0),
+            user_id: self.user_id.unwrap_or(0),
         }
     }
 }

@@ -20,6 +20,7 @@
     </div>
 
     <div class="topbar-meta">
+      <span id="offline-badge" class="badge badge-warn" hidden>离线模式</span>
       <span id="source-badge" class="badge badge-demo">演示数据</span>
       <span id="camera-count" class="muted">0 个点位</span>
     </div>
@@ -29,7 +30,14 @@
         <span>城市码</span>
         <input id="city-code" type="text" inputmode="numeric" maxlength="6" value="021" aria-label="城市码">
       </label>
-      <button id="sync-button" class="button button-primary" type="button">同步官方点位</button>
+      <button id="areas-button" class="button button-ghost button-toggle" type="button"
+        aria-pressed="false" title="显示官方限行区域图层">限行区域</button>
+      <button id="cruise-button" class="button button-ghost button-toggle" type="button"
+        aria-pressed="false" title="开启后，视野进入未覆盖区域会自动同步（15 秒冷却）">自动刷新</button>
+      <button id="gps-button" class="button button-ghost button-toggle" type="button"
+        aria-pressed="false" title="使用 GPS/北斗定位跟随，离线可用；电子眼来自本地缓存">GPS 巡航</button>
+      <button id="sync-button" class="button button-primary" type="button"
+        title="点击：本视野已被缓存覆盖时直接读本地；Shift+点击：强制请求官方接口">同步官方点位</button>
       <span id="account-status" class="account-status">未登录</span>
       <button id="login-button" class="button button-ghost" type="button">登录</button>
       <button id="logout-button" class="button button-ghost" type="button" hidden>退出</button>
@@ -40,9 +48,31 @@
     <section class="map-shell" aria-label="上海电子眼地图">
       <div id="map"></div>
 
+      <div class="route-panel">
+        <div class="route-row">
+          <button id="route-origin" class="button button-ghost footer-button" type="button">设起点</button>
+          <button id="route-destination" class="button button-ghost footer-button" type="button">设终点</button>
+          <button id="route-go" class="button button-primary footer-button" type="button">规划</button>
+          <button id="route-clear" class="button button-ghost footer-button" type="button">清除</button>
+        </div>
+        <label class="route-avoid">
+          <input id="route-avoid" type="checkbox">
+          避开电子眼
+        </label>
+        <label class="route-avoid">
+          半径
+          <select id="route-radius">
+            <option value="60" selected>60 m</option>
+            <option value="100">100 m</option>
+            <option value="150">150 m</option>
+          </select>
+        </label>
+        <div id="route-hint" class="route-hint">在地图上点选起点和终点，使用本地路网规划。</div>
+      </div>
+
       <div class="map-note">
         <strong>拖动地图到目标区域</strong>
-        <span>再点「同步官方点位」。点击电子眼查看详情。</span>
+        <span>再点「同步官方点位」。点位与详情首次请求后写入本机缓存，重复查看不再访问官方接口。</span>
       </div>
 
       <details class="legend">
@@ -54,8 +84,14 @@
           <li><i style="--dot:#2563eb"></i>公交车道</li>
           <li><i style="--dot:#7c3aed"></i>非机动车道</li>
           <li><i style="--dot:#ca8a04"></i>尾号限行</li>
+          <li><i class="legend-area"></i>限行区域（多边形/路段）</li>
         </ul>
       </details>
+
+      <div id="cruise-alert" class="cruise-alert" hidden>
+        <div id="cruise-step"></div>
+        <div id="cruise-camera"></div>
+      </div>
 
       <div id="signature-hint" class="signature-hint" hidden>
         未配置签名证书 MD5，官方接口可能拒绝请求。见 <code>crates/motu-web/README.md</code>。
@@ -82,7 +118,9 @@
 
   <footer class="footer">
     <span>坐标按 GCJ-02 ↔ WGS-84 转换后显示在 OpenStreetMap 上。</span>
-    <span>仅用于个人账号调试；官方点位不会写入磁盘。</span>
+    <span id="cache-status">本地缓存：—</span>
+    <button id="cache-clear" class="button button-ghost footer-button" type="button">清空缓存</button>
+    <span>仅用于个人账号调试；缓存只写本机 <code>var/motu-web</code>，不随仓库分发。</span>
   </footer>
 
   <dialog id="login-dialog" class="dialog">

@@ -11,6 +11,6 @@ python3 crates/camera-web/tests/browser_smoke.py  # 本机安装 Chrome 时运�
 python3 -m http.server 8000
 ```
 
-打开 `http://localhost:8000/crates/camera-web/www/`。请从 HTTP 服务访问，勿直接用 `file://`；数据读取路径是同一仓库下 `crates/camera-catalog/data/shanghai-cameras.json`。打包结果 `crates/camera-web/pkg/` 不提交版本库。
+打开 `http://localhost:8000/crates/camera-web/www/`。请从 HTTP 服务访问，勿直接用 `file://`；页面优先读取 `var/camera/catalog.json`（若已用 `camera-cli collect-file/collect-url` 采集），否则退回同一仓库下的 `crates/camera-catalog/data/shanghai-cameras.json`。展示资料采集审计事件；这些不是实际交通抓拍事件。打包结果 `crates/camera-web/pkg/` 不提交版本库。
 
 后续加入地图/定位前需先有人审过精确坐标和数据再利用权利。目前页面只显示公告、地点描述和未知照片拍摄日期，不把 94 套的公告总数当作 94 条已录入点位。

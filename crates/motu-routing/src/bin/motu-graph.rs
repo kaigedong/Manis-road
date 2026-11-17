@@ -1,0 +1,101 @@
+//! Build, inspect and query the offline road graph.
+//!
+//! ```text
+//! motu-graph build var/offline/osm-central.json var/offline/graph.bin
+//! motu-graph info  var/offline/graph.bin
+//! motu-graph route var/offline/graph.bin 31.2304,121.4737 31.2397,121.4998
+//! ```
+
+use std::{path::Path, process::ExitCode};
+
+use motu_core::LatLng;
+use motu_routing::{RoadGraph, build_from_osm_json};
+
+fn main() -> ExitCode {
+    match run() {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("motu-graph: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn run() -> Result<(), String> {
+    let mut args = std::env::args().skip(1);
+    let command = args.next().ok_or_else(usage)?;
+    match command.as_str() {
+        "build" => {
+            let input = args.next().ok_or_else(usage)?;
+            let output = args.next().ok_or_else(usage)?;
+            println!("reading {input} ...");
+            let bytes = std::fs::read(&input).map_err(|error| format!("{input}: {error}"))?;
+            let (graph, report) = build_from_osm_json(&bytes).map_err(|error| error.to_string())?;
+            graph
+                .save(Path::new(&output))
+                .map_err(|error| error.to_string())?;
+            println!(
+                "nodes {}/{}  ways {}/{}  edges {}  -> {output}",
+                report.nodes_used,
+                report.nodes_total,
+                report.ways_used,
+                report.ways_total,
+                report.edges
+            );
+        }
+        "info" => {
+            let input = args.next().ok_or_else(usage)?;
+            let graph = RoadGraph::load(Path::new(&input)).map_err(|error| error.to_string())?;
+            let bounds = graph.bounds();
+            println!(
+                "nodes {}  edges {}  ways {}",
+                graph.node_count(),
+                graph.edge_count(),
+                graph.ways.len()
+            );
+            if let Some((south, west, north, east)) = bounds {
+                println!("bounds {south:.5},{west:.5} .. {north:.5},{east:.5}");
+            }
+        }
+        "route" => {
+            let input = args.next().ok_or_else(usage)?;
+            let origin = parse_point(&args.next().ok_or_else(usage)?)?;
+            let destination = parse_point(&args.next().ok_or_else(usage)?)?;
+            let graph = RoadGraph::load(Path::new(&input)).map_err(|error| error.to_string())?;
+            let plan = graph
+                .route(origin, destination)
+                .map_err(|error| error.to_string())?;
+            let json = serde_json::to_string_pretty(&plan).map_err(|error| error.to_string())?;
+            println!("{json}");
+        }
+        other => return Err(format!("unknown command {other}\n{}", usage())),
+    }
+    Ok(())
+}
+
+fn parse_point(value: &str) -> Result<LatLng, String> {
+    let (lat, lon) = value
+        .split_once(',')
+        .ok_or_else(|| format!("expected lat,lon, got {value}"))?;
+    let lat = lat
+        .trim()
+        .parse::<f64>()
+        .map_err(|error| format!("bad latitude: {error}"))?;
+    let lon = lon
+        .trim()
+        .parse::<f64>()
+        .map_err(|error| format!("bad longitude: {error}"))?;
+    let point = LatLng::new(lat, lon);
+    if !point.is_valid() {
+        return Err(format!("coordinate out of range: {value}"));
+    }
+    Ok(point)
+}
+
+fn usage() -> String {
+    "usage:
+  motu-graph build <osm.json> <graph.bin>
+  motu-graph info  <graph.bin>
+  motu-graph route <graph.bin> <lat,lon> <lat,lon>"
+        .to_owned()
+}

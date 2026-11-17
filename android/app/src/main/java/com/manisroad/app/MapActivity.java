@@ -1,14 +1,24 @@
 package com.manisroad.app;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.view.View;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.TextView;
 
 import com.manisroad.app.core.CoreResult;
 import com.manisroad.app.core.MotuCore;
+import com.manisroad.app.core.OfflineData;
 import com.manisroad.app.core.SigningCertificate;
 import com.manisroad.app.ui.MapCanvasView;
 
@@ -16,11 +26,15 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Camera-alert screen driven by simulated GPS ticks. The default points are
@@ -33,10 +47,16 @@ public final class MapActivity extends Activity {
     /** AMap city code for the Shanghai demo origin. */
     private static final String OFFICIAL_CITY_CODE = "021";
     private static final int MAX_OFFICIAL_MARKERS = 200;
+    /** Demo destination for the offline route button (Lujiazui). */
+    private static final double DEST_LATITUDE = 31.2397;
+    private static final double DEST_LONGITUDE = 121.4998;
+    private static final int REQUEST_LOCATION = 1001;
 
     private JSONArray cameras = new JSONArray();
     private final List<MapCanvasView.Marker> markers = new ArrayList<>();
     private final List<double[]> routePoints = new ArrayList<>();
+    /** Details exported by the web debugger or opened while online. */
+    private final Map<String, JSONObject> offlineDetails = new LinkedHashMap<>();
 
     private MapCanvasView map;
     private TextView alert;
@@ -46,6 +66,26 @@ public final class MapActivity extends Activity {
     private float bearing;
     private boolean alertsEnabled = true;
     private boolean detailLoading;
+    private File graphFile;
+    private CheckBox avoidCameras;
+    private boolean gpsEnabled;
+    private boolean routePlanned;
+    private JSONArray routeSteps;
+    private String lastScanText = "";
+    private long lastRerouteAt;
+
+    private final BroadcastReceiver cruiseReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            if (CruiseService.ACTION_UPDATE.equals(action)) {
+                onCruiseUpdate(intent);
+            } else if (CruiseService.ACTION_STATE.equals(action)) {
+                gpsEnabled = intent.getBooleanExtra(CruiseService.EXTRA_RUNNING, false);
+                syncGpsButton();
+            }
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -61,16 +101,58 @@ public final class MapActivity extends Activity {
             alert.setText(getString(R.string.core_init_failed, init.error));
         }
 
+        graphFile = OfflineData.ensureGraph(this);
+        avoidCameras = findViewById(R.id.checkbox_avoid_cameras);
+        loadOfflineDetails();
         buildRoute();
-        loadSampleCameras();
+        if (!loadOfflineCameras()) {
+            loadSampleCameras();
+        }
         render();
 
+        findViewById(R.id.button_offline_route).setOnClickListener(view -> planOfflineRoute());
+        findViewById(R.id.button_gps).setOnClickListener(view -> toggleGps());
         syncButton = findViewById(R.id.button_sync_official);
         syncButton.setOnClickListener(view -> syncOfficialCameras());
         findViewById(R.id.button_forward).setOnClickListener(view -> advance());
         findViewById(R.id.button_turn).setOnClickListener(view -> turn());
         findViewById(R.id.button_audit).setOnClickListener(view -> audit());
         findViewById(R.id.button_reset).setOnClickListener(view -> reset());
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(CruiseService.ACTION_UPDATE);
+        filter.addAction(CruiseService.ACTION_STATE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(cruiseReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            registerReceiver(cruiseReceiver, filter);
+        }
+        gpsEnabled = CruiseService.isRunning();
+        syncGpsButton();
+    }
+
+    @Override
+    protected void onStop() {
+        unregisterReceiver(cruiseReceiver);
+        super.onStop();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                                           int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != REQUEST_LOCATION) {
+            return;
+        }
+        if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            startCruiseService();
+        } else {
+            alert.setText(R.string.gps_denied);
+        }
     }
 
     @Override
@@ -88,6 +170,39 @@ public final class MapActivity extends Activity {
             MotuCore.pause();
             alert.setText(R.string.alerts_disabled);
         }
+    }
+
+    /** Load cameras exported by the web debugger (`/api/export/cameras`). */
+    private boolean loadOfflineCameras() {
+        File file = OfflineData.camerasFile(this);
+        String json = OfflineData.readText(file);
+        JSONArray array = OfflineData.parseCameras(json);
+        if (array == null || array.length() == 0) {
+            return false;
+        }
+        cameras = array;
+            markers.clear();
+            for (int index = 0; index < array.length(); index += 1) {
+                JSONObject camera = array.optJSONObject(index);
+                if (camera == null) {
+                    continue;
+                }
+                JSONObject position = camera.optJSONObject("position");
+                if (position == null) {
+                    continue;
+                }
+                JSONArray types = camera.optJSONArray("tabTypes");
+                int type = types != null && types.length() > 0 ? types.optInt(0) : 0;
+                markers.add(new MapCanvasView.Marker(
+                        camera.optString("memberByString", camera.optString("id")),
+                        position.optDouble("latitude"),
+                        position.optDouble("longitude"),
+                        typeName(type),
+                        type == 1,
+                        true));
+            }
+        reloadCameras();
+        return true;
     }
 
     private void loadSampleCameras() {
@@ -126,6 +241,9 @@ public final class MapActivity extends Activity {
     }
 
     private void buildRoute() {
+        routePlanned = false;
+        routeSteps = null;
+        lastScanText = "";
         routePoints.add(new double[]{ORIGIN_LATITUDE, ORIGIN_LONGITUDE});
         routePoints.add(new double[]{ORIGIN_LATITUDE + 500.0 / 111_320.0, ORIGIN_LONGITUDE});
     }
@@ -194,9 +312,202 @@ public final class MapActivity extends Activity {
         latitude = ORIGIN_LATITUDE;
         longitude = ORIGIN_LONGITUDE;
         bearing = 0f;
+        routePlanned = false;
+        routeSteps = null;
+        lastScanText = "";
         loadSampleCameras();
         alert.setText(R.string.no_alert);
         render();
+    }
+
+    /** Plan with the local OSM graph; no network is involved. */
+    private void planOfflineRoute() {
+        if (graphFile == null || !graphFile.isFile()) {
+            alert.setText(R.string.offline_route_missing);
+            return;
+        }
+        boolean avoid = avoidCameras != null && avoidCameras.isChecked();
+        CoreResult result = avoid
+                ? MotuCore.routeAvoiding(
+                        graphFile.getAbsolutePath(), latitude, longitude,
+                        DEST_LATITUDE, DEST_LONGITUDE, cameras, 100.0, 0.0, 0.0)
+                : MotuCore.route(
+                        graphFile.getAbsolutePath(), latitude, longitude,
+                        DEST_LATITUDE, DEST_LONGITUDE);
+        JSONObject data = result.objectData();
+        if (!result.ok || data == null) {
+            alert.setText(getString(R.string.native_error, result.error));
+            return;
+        }
+        JSONObject avoidance = data.optJSONObject("avoidance");
+        JSONObject plan = data.optJSONObject("plan");
+        if (plan != null) {
+            data = plan;
+        }
+        JSONArray points = data.optJSONArray("points");
+        routePoints.clear();
+        if (points != null) {
+            for (int index = 0; index < points.length(); index += 1) {
+                JSONObject point = points.optJSONObject(index);
+                if (point != null) {
+                    routePoints.add(new double[]{
+                            point.optDouble("latitude"), point.optDouble("longitude")});
+                }
+            }
+        }
+        routePlanned = true;
+        routeSteps = data.optJSONArray("steps");
+        render();
+        double km = data.optDouble("distanceM") / 1000.0;
+        double minutes = data.optDouble("durationS") / 60.0;
+        String firstStep = "";
+        JSONArray steps = data.optJSONArray("steps");
+        if (steps != null && steps.length() > 0) {
+            firstStep = steps.optJSONObject(0).optString("instruction");
+        }
+        lastRerouteAt = SystemClock.elapsedRealtime();
+        String comparison = "";
+        if (avoidance != null) {
+            if (avoidance.optBoolean("applied")) {
+                comparison = String.format(Locale.ROOT, " · 已知点位 %d→%d，多 %d 分钟",
+                        avoidance.optInt("camerasBefore"),
+                        avoidance.optInt("camerasAfter"),
+                        Math.max(0, Math.round(avoidance.optDouble("extraSeconds") / 60.0)));
+                String reason = avoidance.optString("reason").trim();
+                if (!reason.isEmpty()) {
+                    comparison += "（" + reason + "）";
+                }
+            } else if (avoidance.optBoolean("rejected")) {
+                comparison = " · 保留最快路线（" + avoidance.optString("reason") + "）";
+            }
+        }
+        if (gpsEnabled) {
+            updateNavigationAlert();
+        } else {
+            alert.setText(String.format(Locale.ROOT,
+                    getString(R.string.offline_route_result), km, minutes, firstStep)
+                    + comparison);
+        }
+    }
+
+    private void toggleGps() {
+        if (CruiseService.isRunning()) {
+            stopService(new Intent(this, CruiseService.class));
+            gpsEnabled = false;
+            syncGpsButton();
+            alert.setText(R.string.gps_disabled);
+            return;
+        }
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                requestPermissions(new String[]{
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                        Manifest.permission.POST_NOTIFICATIONS}, REQUEST_LOCATION);
+            } else {
+                requestPermissions(new String[]{
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION}, REQUEST_LOCATION);
+            }
+            return;
+        }
+        startCruiseService();
+    }
+
+    private void startCruiseService() {
+        Intent intent = new Intent(this, CruiseService.class)
+                .setAction(CruiseService.ACTION_START);
+        startForegroundService(intent);
+        gpsEnabled = true;
+        syncGpsButton();
+        alert.setText(R.string.gps_enabled);
+    }
+
+    private void syncGpsButton() {
+        Button button = findViewById(R.id.button_gps);
+        if (button != null) {
+            button.setText(gpsEnabled ? R.string.gps_stop : R.string.gps_start);
+        }
+    }
+
+    /** Position/scan updates broadcast by {@link CruiseService}. */
+    private void onCruiseUpdate(Intent intent) {
+        latitude = intent.getDoubleExtra(CruiseService.EXTRA_LATITUDE, latitude);
+        longitude = intent.getDoubleExtra(CruiseService.EXTRA_LONGITUDE, longitude);
+        bearing = intent.getFloatExtra(CruiseService.EXTRA_BEARING, bearing);
+        String scanJson = intent.getStringExtra(CruiseService.EXTRA_SCAN);
+        if (scanJson != null && !scanJson.isEmpty()) {
+            try {
+                lastScanText = formatScan(new JSONObject(scanJson));
+            } catch (JSONException ignored) {
+                // Malformed scan payload; keep the previous alert.
+            }
+        }
+        updateNavigationAlert();
+        render();
+        long now = SystemClock.elapsedRealtime();
+        if (routePlanned && !routePoints.isEmpty() && now - lastRerouteAt > 10_000L) {
+            lastRerouteAt = now;
+            planOfflineRoute();
+        }
+    }
+
+    /** Next turn + the latest camera alert, based on the local route. */
+    private void updateNavigationAlert() {
+        String guidance = "";
+        if (routePlanned && routeSteps != null && !routePoints.isEmpty()) {
+            int index = nearestRouteIndex();
+            for (int stepIndex = 0; stepIndex < routeSteps.length(); stepIndex += 1) {
+                JSONObject step = routeSteps.optJSONObject(stepIndex);
+                if (step == null) {
+                    continue;
+                }
+                int endIndex = step.optInt("endIndex", -1);
+                if (!"arrive".equals(step.optString("direction"))
+                        && endIndex > index && endIndex < routePoints.size()) {
+                    double[] target = routePoints.get(endIndex);
+                    double distance = distanceMeters(
+                            latitude, longitude, target[0], target[1]);
+                    guidance = String.format(Locale.ROOT, "下一步：%s · %d m",
+                            step.optString("instruction"), Math.max(1, Math.round(distance)));
+                    break;
+                }
+            }
+        }
+        if (!guidance.isEmpty() && !lastScanText.isEmpty()) {
+            alert.setText(guidance + "\n" + lastScanText);
+        } else if (!guidance.isEmpty()) {
+            alert.setText(guidance);
+        } else if (!lastScanText.isEmpty()) {
+            alert.setText(lastScanText);
+        }
+    }
+
+    private int nearestRouteIndex() {
+        int best = 0;
+        double bestDistance = Double.MAX_VALUE;
+        for (int index = 0; index < routePoints.size(); index += 1) {
+            double[] point = routePoints.get(index);
+            double distance = distanceMeters(latitude, longitude, point[0], point[1]);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = index;
+            }
+        }
+        return best;
+    }
+
+    private static double distanceMeters(double lat1, double lon1, double lat2, double lon2) {
+        double radius = 6_371_008.8;
+        double phi1 = Math.toRadians(lat1);
+        double phi2 = Math.toRadians(lat2);
+        double dphi = Math.toRadians(lat2 - lat1);
+        double dlambda = Math.toRadians(lon2 - lon1);
+        double a = Math.sin(dphi / 2) * Math.sin(dphi / 2)
+                + Math.cos(phi1) * Math.cos(phi2)
+                * Math.sin(dlambda / 2) * Math.sin(dlambda / 2);
+        return 2 * radius * Math.asin(Math.sqrt(a));
     }
 
     private void syncOfficialCameras() {
@@ -241,6 +552,12 @@ public final class MapActivity extends Activity {
         if (detailLoading) {
             return;
         }
+        JSONObject localDetail = offlineDetails.get(marker.id);
+        if (localDetail != null) {
+            showCameraDetailDialog(localDetail);
+            alert.setText(R.string.camera_detail_loaded);
+            return;
+        }
         if (!marker.official) {
             alert.setText(marker.id.startsWith("demo-")
                     ? R.string.camera_detail_demo_unavailable
@@ -274,9 +591,52 @@ public final class MapActivity extends Activity {
                     return;
                 }
                 alert.setText(R.string.camera_detail_loaded);
+                offlineDetails.put(marker.id, data);
+                saveOfflineDetails();
                 showCameraDetailDialog(data);
             });
         }, "motu-camera-detail").start();
+    }
+
+    private void loadOfflineDetails() {
+        String json = OfflineData.readText(OfflineData.detailsFile(this));
+        if (json == null) {
+            return;
+        }
+        try {
+            JSONObject root = new JSONObject(json);
+            JSONObject details = root.optJSONObject("details");
+            if (details == null) {
+                details = root;
+            }
+            Iterator<String> keys = details.keys();
+            while (keys.hasNext()) {
+                String key = keys.next();
+                JSONObject detail = details.optJSONObject(key);
+                if (detail != null) {
+                    offlineDetails.put(key, detail);
+                }
+            }
+        } catch (JSONException error) {
+            android.util.Log.w("MotuOffline", "cannot parse details: " + error.getMessage());
+        }
+    }
+
+    /** Persist opened details so they remain available offline. */
+    private void saveOfflineDetails() {
+        try {
+            JSONObject root = new JSONObject();
+            root.put("generatedAtMs", System.currentTimeMillis());
+            root.put("count", offlineDetails.size());
+            JSONObject details = new JSONObject();
+            for (Map.Entry<String, JSONObject> entry : offlineDetails.entrySet()) {
+                details.put(entry.getKey(), entry.getValue());
+            }
+            root.put("details", details);
+            OfflineData.writeText(OfflineData.detailsFile(this), root.toString());
+        } catch (JSONException error) {
+            android.util.Log.w("MotuOffline", "cannot save details: " + error.getMessage());
+        }
     }
 
     private void showCameraDetailDialog(JSONObject data) {
@@ -551,6 +911,6 @@ public final class MapActivity extends Activity {
         map.setData(routePoints, markers, latitude, longitude, bearing);
         TextView position = findViewById(R.id.text_position);
         position.setText(String.format(Locale.ROOT,
-                "模拟位置 %.6f, %.6f · 朝向 %d°", latitude, longitude, (int) bearing));
+                "位置 %.6f, %.6f · 朝向 %d°", latitude, longitude, (int) bearing));
     }
 }

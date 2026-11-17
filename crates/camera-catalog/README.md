@@ -1,6 +1,6 @@
 # 上海电子眼记录：资料收集试点
 
-现阶段**只做资料目录，不做导航、自动绕行或公开电子眼地图**。独立 Rust crate：`src/model.rs` 描述来源、点位、坐标与照片；`src/catalog.rs` 做纯 Rust JSON 解析与规则校验、并通过 Tokio 异步读取原生文件；`src/main.rs` 是 Tokio 命令行检查工具。浏览器 WASM crate 复用纯解析模块。以后可以在这些模块上添加来源适配器、人工审核与 API，不需要先绑定某家地图商。
+现阶段**只做资料采集与审核目录，不做导航、自动绕行或公开电子眼地图**。同一独立库 crate 下分成两个目录：`src/catalog/` 放来源、点位与采集审计事件模型及纯 Rust 校验；`src/collector/` 放仅限原生端的公告 HTML 采集、表格候选提取、变更检测与事件生成。没有 `main.rs`；Tokio 命令行入口仍在兄弟 crate `camera-cli`，浏览器 WASM crate 仅复用 catalog。
 
 ## 已收集到什么
 
@@ -15,10 +15,17 @@
 
 ```bash
 cargo test --offline -p manis-camera-catalog
-cargo run --offline -p manis-camera-catalog -- validate crates/camera-catalog/data/shanghai-cameras.json
-cargo run --offline -p manis-camera-catalog -- stats crates/camera-catalog/data/shanghai-cameras.json
-cargo run --offline -p manis-camera-catalog -- points crates/camera-catalog/data/shanghai-cameras.json
+cargo run --offline -p camera-cli -- validate crates/camera-catalog/data/shanghai-cameras.json
+cargo run --offline -p camera-cli -- stats crates/camera-catalog/data/shanghai-cameras.json
+cargo run --offline -p camera-cli -- points crates/camera-catalog/data/shanghai-cameras.json
+
+# 手头有合法取得的原始公告 HTML 时，将采集结果、审计事件和原始快照写到 var/camera：
+cargo run --offline -p camera-cli -- collect-file crates/camera-catalog/data/shanghai-cameras.json xuhui-20250828 /path/to/notice.html var/camera
+# 可访问政府公告网站的网络环境中，也可直接请求来源链接：
+cargo run --offline -p camera-cli -- collect-url crates/camera-catalog/data/shanghai-cameras.json xuhui-20250828 var/camera
 ```
+
+`collect-file` / `collect-url` 读取 `var/camera/catalog.json`（若存在）以去重，首次从种子数据复制；保存 `var/camera/snapshots/<SHA-256>.html` 原始证据。事件分为 `source_observed`、`source_changed`、`candidate_discovered`、`needs_manual_review`，这些是**资料采集事件**，不是实际交通违法事件。只自动提取含明确“设备设置地点”等表头的 HTML 表格；图片表格仅记录待人工处理，不虚构坐标。当前运行环境无法直接访问政府网站，未执行过真实在线采集，种子目录的 3 条仍然仅来自检索摘录。
 
 `points` 只输出已核对且有精确 GCJ-02 坐标的记录，目前正确结果是 `[]`。`sources[].published_on` 是**公告发布日期**，绝非照片拍摄日期；只有在有权展示的照片与可核对的日期证据时才填写 `photo_url` / `photo_taken_on`。
 

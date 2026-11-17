@@ -22,6 +22,23 @@
     <string name="turned">已转向 %1$d°</string>
     <string name="audit_result">路线命中 %1$d 个电子眼</string>
 
+    <string name="cruise_channel_name">GPS 巡航</string>
+    <string name="cruise_channel_description">锁屏时持续定位并提醒本地电子眼</string>
+    <string name="cruise_notification_title">Manis Road · GPS 巡航</string>
+    <string name="cruise_running">巡航中，等待定位…</string>
+    <string name="cruise_alert">提醒：%1$s · 前方 %2$d m</string>
+
+    <string name="avoid_cameras">避开电子眼（多花时间换更少已知点位）</string>
+    <string name="offline_route">离线路线</string>
+    <string name="gps_start">GPS 巡航</string>
+    <string name="gps_stop">停止 GPS</string>
+    <string name="offline_route_missing">缺少 graph.bin：请把离线路网图推到 files/offline/graph.bin</string>
+    <string name="offline_route_result">离线路线 %1$.1f km · 约 %2$.0f 分钟\n%3$s</string>
+    <string name="gps_enabled">GPS 巡航已开启（仅 GNSS，不访问网络）</string>
+    <string name="gps_disabled">GPS 巡航已关闭</string>
+    <string name="gps_denied">未授予定位权限，无法开始 GPS 巡航</string>
+    <string name="gps_unavailable">系统定位或 GNSS 不可用</string>
+
     <string name="sync_official">同步官方点位</string>
     <string name="sync_official_in_progress">正在同步官方点位…</string>
     <string name="sync_official_result">已同步 %1$d 个官方点位（仅当前会话，不写入仓库）</string>

@@ -14,4 +14,7 @@
 - TDD：初始 `cargo test --offline` 因尚未实现 crate 导入失败（预期 RED）；实现后测试通过。两次 `cargo fmt --check` 发现新增测试格式差异，均用 `cargo fmt` 修复。
 - 用户指出模块应独立 crate，且要求 Tokio + WASM 网页；已将项目改为 workspace：`crates/camera-catalog`（纯 Rust 领域模型+Tokio 原生异步读取/CLI）、`crates/camera-web`（共享领域模块，wasm-bindgen Rust 生成安全转义的审核预览，JS 只加载）；数据、测试与 README 搬入独立 crate。
 - 验证：workspace 9 项测试、clippy -D warnings、WASM target check 与 wasm-pack release 编译通过；Chrome headless 页面显示 3 候选/0 已审核和日期未知。首次 Chrome 在 macOS 输出 DOM 后未退出，改为有超时保护的 `browser_smoke.py` 测试并通过。
-- Git 已 init，目前尚无任何提交；按前一轮用户要求在检查暂存内容后提交初始 commit。
+- 已完成首次 commit `8e6d414`。后续用户明确不再每轮提交，且要求将 task_plan.md/findings.md/progress.md 从 Git 跟踪去除；已 git rm --cached（本地保留）并加 .gitignore，未提交。
+- 用户追问库 crate 中为何有 main：将二进制入口移至 `crates/camera-cli`，Tokio 异步 I/O 归 CLI；`camera-web` WASM 仍共享库。验证 workspace 9 项测试、clippy、wasm32 check、Chrome 冒烟均通过；未提交。
+- 用户要求在同一 catalog crate 内实现采集，两个文件夹即可：已建 `src/catalog/`（模型、校验、审计事件）和 `src/collector/`（政府 URL 白名单下载、HTML 地点表格提取、原始快照 SHA-256、来源变更/候选发现/人工复核事件与去重）；`camera-cli collect-file/collect-url` 保存原文快照与单一 JSON 事件目录；WASM 可显示事件。当前网络 fake-IP 阻断，尚未获取官方页面原始 HTML，**种子真实线上采集事件仍是 0**；仅测试夹具生成模拟事件，不宣称真实点位已核验。
+- 意外中断后恢复上下文，补了 URL 白名单单测与空表人工复核测试；曾遇 `clippy::items_after_test_module`，已把测试模块移到文件末尾。最终 fmt、Rust 16 项测试、Clippy -D warnings、wasm32 check、wasm-pack 构建和 Chrome 冒烟均通过。

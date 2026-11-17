@@ -1,17 +1,14 @@
 use std::collections::HashSet;
-#[cfg(not(target_arch = "wasm32"))]
-use std::path::Path;
 
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::model::{CameraRecord, EvidenceLevel, Source};
+mod model;
+pub use model::{CameraRecord, CatalogEvent, CatalogEventKind, Coordinate, EvidenceLevel, Source};
 
 #[derive(Debug, Error)]
 pub enum CatalogError {
-    #[error("读取目录失败: {0}")]
-    Io(#[from] std::io::Error),
     #[error("解析目录失败: {0}")]
     Json(#[from] serde_json::Error),
     #[error("资料校验失败: {0}")]
@@ -23,6 +20,8 @@ pub enum CatalogError {
 pub struct Catalog {
     pub sources: Vec<Source>,
     pub records: Vec<CameraRecord>,
+    #[serde(default)]
+    pub events: Vec<CatalogEvent>,
 }
 
 impl Catalog {
@@ -31,13 +30,6 @@ impl Catalog {
         let catalog: Self = serde_json::from_str(content)?;
         catalog.validate()?;
         Ok(catalog)
-    }
-
-    /// 原生端 Tokio 异步读取；浏览器端通过 fetch 获取文本后调用 parse_str。
-    #[cfg(not(target_arch = "wasm32"))]
-    pub async fn load(path: impl AsRef<Path>) -> Result<Self, CatalogError> {
-        let content = tokio::fs::read_to_string(path).await?;
-        Self::parse_str(&content)
     }
 
     pub fn validate(&self) -> Result<(), CatalogError> {
@@ -89,6 +81,20 @@ impl Catalog {
                 && record.coordinate.is_none()
             {
                 return Err(invalid(format!("{} 标记已审核但缺少精确坐标", record.id)));
+            }
+        }
+        let mut event_ids = HashSet::new();
+        for event in &self.events {
+            if !event_ids.insert(event.id.as_str()) {
+                return Err(invalid(format!("重复的事件 ID: {}", event.id)));
+            }
+            if !source_ids.contains(event.source_id.as_str()) {
+                return Err(invalid(format!("事件 {} 引用不存在的来源", event.id)));
+            }
+            if let Some(record_id) = &event.record_id
+                && !record_ids.contains(record_id.as_str())
+            {
+                return Err(invalid(format!("事件 {} 引用不存在的点位", event.id)));
             }
         }
         Ok(())

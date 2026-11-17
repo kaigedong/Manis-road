@@ -1,5 +1,5 @@
 //! Rust/WASM 前端：仅预览公告来源和候选点位，不将未审核资料冒充地图定位。
-use manis_camera_catalog::{Catalog, CatalogError, EvidenceLevel};
+use manis_camera_catalog::{Catalog, CatalogError, CatalogEventKind, EvidenceLevel};
 use std::fmt::Write;
 
 pub fn render_catalog_json(json: &str) -> Result<String, CatalogError> {
@@ -66,6 +66,19 @@ fn render_catalog(catalog: &Catalog) -> String {
             escape(&source.review_note)
         );
     }
+    html.push_str("</ul></section><section aria-label=\"采集事件\"><h2>采集审计事件</h2><p>以下是公告资料采集事件，不是交通违法抓拍记录。</p><ul>");
+    if catalog.events.is_empty() {
+        html.push_str("<li>尚无实际采集事件；初始 3 条候选来自待核验检索摘录。</li>");
+    }
+    for event in &catalog.events {
+        let name = match event.kind {
+            CatalogEventKind::SourceObserved => "公告快照已获取",
+            CatalogEventKind::SourceChanged => "公告内容变更",
+            CatalogEventKind::CandidateDiscovered => "候选地点发现",
+            CatalogEventKind::NeedsManualReview => "等待人工提取",
+        };
+        let _ = write!(html, "<li>{}：{}</li>", name, escape(&event.detail));
+    }
     html.push_str("</ul></section>");
     html
 }
@@ -96,6 +109,24 @@ mod tests {
     #[test]
     fn html_escapes_untrusted_announcements() {
         assert_eq!(escape("<&\"'>"), "&lt;&amp;&quot;&#39;&gt;");
+    }
+
+    #[test]
+    fn renders_collection_event_as_audit_not_violation() {
+        let fixture = include_str!("../../camera-catalog/data/shanghai-cameras.json");
+        let mut catalog = Catalog::parse_str(fixture).expect("valid fixture");
+        catalog.events.push(manis_camera_catalog::CatalogEvent {
+            id: "audit-1".into(),
+            source_id: "xuhui-20250828".into(),
+            kind: CatalogEventKind::SourceObserved,
+            record_id: None,
+            snapshot_sha256: "test-digest".into(),
+            recorded_at_unix_ms: 1,
+            detail: "公告原文已归档".into(),
+        });
+        let html = render_catalog(&catalog);
+        assert!(html.contains("公告快照已获取：公告原文已归档"));
+        assert!(html.contains("不是交通违法抓拍记录"));
     }
 
     #[test]

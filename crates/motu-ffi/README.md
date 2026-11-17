@@ -31,6 +31,9 @@
 | `nativeSyncOfficialCameras(lat, lon, city, signingCertificate)` | 登录后同步官方电子眼；仅更新内存扫描集合 |
 | `nativeLoadCameraDetail(cameraId, signingCertificate)` | 登录后加载电子眼详情与罚单；返回合并 JSON，不持久化 |
 | `nativeVehicleValidate` | 车辆校验报告 |
+| `nativeLoadGraph(graphPath)` | 加载并缓存离线 OSM 路网图，返回节点/边/范围 |
+| `nativeRoute(graphPath, oLat, oLon, dLat, dLon)` | 纯离线 A* 路线，返回 points/distance/duration/steps（含 `startIndex`/`endIndex`） |
+| `nativeRouteAvoiding(graphPath, …, camerasJson, radiusM, maxRatio, maxMinutes)` | 电子眼加权绕行，返回 `{plan, avoidance}`；超限自动回退最快路线 |
 | `nativeRouteAudit` | 路线对避让区/电子眼的审计 |
 | `nativePlanStraightLine` | 离线直线规划（`RoutePlanner` 端口） |
 | `nativeEncodePolyline` / `nativeDecodePolyline` / `nativeParseAmapPositions` | polyline 与 AMap 坐标 |

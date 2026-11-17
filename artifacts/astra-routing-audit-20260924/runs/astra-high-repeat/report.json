@@ -1,0 +1,162 @@
+{
+  "name": "astra-high-repeat",
+  "model": "gpt-6-astra",
+  "effort": "high",
+  "task": "pong",
+  "configMode": "inherit",
+  "startedAt": "2026-09-24T08:57:58.604Z",
+  "prompt": "Reply with exactly the single word: pong. Do not call tools or read files.",
+  "cliVersion": "0.156.0",
+  "responses": [
+    {
+      "id": "resp_0e96648417fcd67f016ab4e61a348087d2bda59dd43f2e3447",
+      "events": [
+        "response.created",
+        "response.in_progress",
+        "response.completed"
+      ],
+      "models": [
+        "gpt-6-astra"
+      ],
+      "model": "gpt-6-astra",
+      "created_at": 1790240282,
+      "status": "completed",
+      "service_tier": "auto",
+      "incomplete_details": null,
+      "usage": {
+        "input_tokens": 13212,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 0
+        },
+        "output_tokens": 0,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 13212
+      },
+      "reasoning": {
+        "effort": "high"
+      },
+      "outputItems": 0
+    },
+    {
+      "id": "resp_0e96648417fcd67f016ab4e61c918c87d2b048b9c3c6114551",
+      "events": [
+        "response.created",
+        "response.in_progress",
+        "response.completed"
+      ],
+      "models": [
+        "gpt-6-astra"
+      ],
+      "model": "gpt-6-astra",
+      "created_at": 1790240284,
+      "status": "completed",
+      "service_tier": "default",
+      "incomplete_details": null,
+      "usage": {
+        "input_tokens": 16991,
+        "input_tokens_details": {
+          "cache_write_tokens": 0,
+          "cached_tokens": 13056
+        },
+        "output_tokens": 5,
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        },
+        "total_tokens": 16996
+      },
+      "reasoning": {
+        "effort": "high"
+      },
+      "outputItems": 0
+    }
+  ],
+  "handshakes": [
+    {
+      "headerNames": [
+        "date",
+        "connection",
+        "upgrade",
+        "sec-websocket-accept",
+        "sec-websocket-extensions",
+        "server",
+        "x-models-etag",
+        "x-openai-proxy-wasm",
+        "cf-cache-status",
+        "strict-transport-security",
+        "x-content-type-options",
+        "report-to",
+        "nel",
+        "referrer-policy",
+        "cross-origin-opener-policy",
+        "cf-ray"
+      ],
+      "headers": {
+        "date": "Thu, 24 Sep 2026 08:58:01 GMT",
+        "sec-websocket-extensions": "permessage-deflate",
+        "server": "cloudflare"
+      }
+    }
+  ],
+  "connections": [
+    "wss://chatgpt.com/backend-api/codex/responses"
+  ],
+  "eventCounts": {
+    "codex.rate_limits": 2,
+    "codex.response.metadata": 2,
+    "response.created": 2,
+    "response.in_progress": 2,
+    "responsesapi.websocket_timing": 2,
+    "response.completed": 2,
+    "response.output_item.added": 1,
+    "response.content_part.added": 1,
+    "response.output_text.delta": 1,
+    "response.output_text.done": 1,
+    "response.content_part.done": 1,
+    "response.output_item.done": 1
+  },
+  "errorCodes": [],
+  "observations": [],
+  "parseErrors": 0,
+  "rawLogsPersisted": false,
+  "command": {
+    "binary": "codex",
+    "args": [
+      "exec",
+      "--ephemeral",
+      "-s",
+      "read-only",
+      "--skip-git-repo-check",
+      "--color",
+      "never",
+      "--json",
+      "-C",
+      "/Users/bobo/Documents/bobo/Manis-road/artifacts/astra-routing-audit-20260924/work",
+      "-m",
+      "gpt-6-astra",
+      "-c",
+      "model_reasoning_effort=\"high\"",
+      "-c",
+      "service_tier=\"default\"",
+      "-c",
+      "notify=[]",
+      "Reply with exactly the single word: pong. Do not call tools or read files."
+    ]
+  },
+  "configSha256": "31ac0243272810f05478b6633bd81f85c1115586c35bf9a9ea54efaad6f38283",
+  "cliUsage": {
+    "input_tokens": 16991,
+    "cached_input_tokens": 13056,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 5,
+    "reasoning_output_tokens": 0
+  },
+  "endedAt": "2026-09-24T08:58:17.982Z",
+  "exitCode": 0,
+  "signal": null,
+  "timedOut": false,
+  "modelMismatch": false,
+  "completedResponses": 2
+}
