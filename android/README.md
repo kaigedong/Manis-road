@@ -46,15 +46,20 @@ sdk.dir=/path/to/Android/sdk
 `build-rust.sh` 会从 `ANDROID_HOME` / `ANDROID_SDK_ROOT` / `~/Android/sdk`
 推断 SDK，用 `ANDROID_NDK_HOME` 或 `$SDK/ndk/27.0.12077973` 指定 NDK。
 
-## 离线底图（MapLibre Native）
+## 离线底图（MapLibre Native + PMTiles）
 
-`BaseMapActivity` 用 MapLibre Native 渲染本机路网，数据是包内 `assets/roads.geojson`
-（由 `tools/map-preview/geojson-for-android.mjs` 从同一份 OSM 抽取生成）：
+`BaseMapActivity` 用 MapLibre Native 渲染本机路网，底图是 `tiles.pmtiles`
+（`.mrdp` 里的同一条目）：
 
 ```bash
-node tools/map-preview/geojson-for-android.mjs \
-  var/offline/roads-od.geojson android/app/src/main/assets/roads.geojson
+adb push var/offline/roads-od.pmtiles \
+  /sdcard/Android/data/com.manisroad.app/files/offline/tiles.pmtiles
 ```
+
+MapLibre Android 的矢量源只接受 HTTP 瓦片模板，没有内建 `pmtiles://` 协议，
+所以应用内起了一个只绑定 `127.0.0.1` 的 `TileServer`：收到 `/tiles/{z}/{x}/{y}.mvt`
+就用 JNI 从归档里取**原始 gzip 瓦片**返回（`Content-Encoding: gzip`，不重复压缩）。
+数据不出设备。缺 `tiles.pmtiles` 时地图留空并弹提示，不再有 GeoJSON 兜底。
 
 入口：仪表盘「离线底图（MapLibre）」。`app/build.gradle.kts` 依赖
 `org.maplibre.gl:android-sdk:13.7.1`，`gradle.properties` 需要

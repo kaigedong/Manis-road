@@ -9,6 +9,7 @@ import android.widget.Toast;
 import com.manisroad.app.core.CoreResult;
 import com.manisroad.app.core.MotuCore;
 import com.manisroad.app.core.OfflineData;
+import com.manisroad.app.core.TileServer;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -41,113 +42,68 @@ public final class BaseMapActivity extends Activity {
 
     private static final String TAG = "BaseMapActivity";
 
-    /** 只画道路：背景 + 线，颜色按等级区分。 */
-    private static final String STYLE_JSON = """
-        {
-          "version": 8,
-          "sources": {
-            "roads": {
-              "type": "geojson",
-              "data": "asset://roads.geojson"
-            },
-            "route": {
-              "type": "geojson",
-              "data": { "type": "FeatureCollection", "features": [] }
-            },
-            "endpoints": {
-              "type": "geojson",
-              "data": { "type": "FeatureCollection", "features": [] }
-            },
-            "cameras": {
-              "type": "geojson",
-              "data": { "type": "FeatureCollection", "features": [] }
-            },
-            "me": {
-              "type": "geojson",
-              "data": { "type": "FeatureCollection", "features": [] }
-            }
-          },
-          "layers": [
-            {
-              "id": "background",
-              "type": "background",
-              "paint": { "background-color": "#f4f1ea" }
-            },
-            {
-              "id": "road-casing",
-              "type": "line",
-              "source": "roads",
-              "paint": { "line-color": "#ffffff", "line-width": 3.2 }
-            },
-            {
-              "id": "roads",
-              "type": "line",
-              "source": "roads",
-              "paint": {
-                "line-color": [
-                  "match", ["get", "highway"],
-                  "trunk", "#d94f2b",
-                  "primary", "#e07b39",
-                  "secondary", "#e8a33d",
-                  "tertiary", "#f0c04a",
-                  "#5d8aa8"
-                ],
-                "line-width": 1.6
-              }
-            },
-            {
-              "id": "route-casing",
-              "type": "line",
-              "source": "route",
-              "layout": { "line-join": "round", "line-cap": "round" },
-              "paint": { "line-color": "#ffffff", "line-width": 9 }
-            },
-            {
-              "id": "route-line",
-              "type": "line",
-              "source": "route",
-              "layout": { "line-join": "round", "line-cap": "round" },
-              "paint": { "line-color": "#d81b60", "line-width": 6 }
-            },
-            {
-              "id": "cameras",
-              "type": "circle",
-              "source": "cameras",
-              "paint": {
-                "circle-radius": 5,
-                "circle-color": ["match", ["get", "type"],
-                  1, "#e53935", 3, "#e53935", 10, "#e53935",
-                  4, "#fb8c00", 5, "#fb8c00", 7, "#fb8c00", 13, "#fb8c00",
-                  "#757575"],
-                "circle-stroke-color": "#ffffff",
-                "circle-stroke-width": 1
-              }
-            },
-            {
-              "id": "me",
-              "type": "circle",
-              "source": "me",
-              "paint": {
-                "circle-radius": 8,
-                "circle-color": "#1e88e5",
-                "circle-stroke-color": "#ffffff",
-                "circle-stroke-width": 3
-              }
-            },
-            {
-              "id": "endpoints",
-              "type": "circle",
-              "source": "endpoints",
-              "paint": {
-                "circle-radius": 7,
-                "circle-color": ["match", ["get", "kind"], "origin", "#2e7d32", "#c62828"],
-                "circle-stroke-color": "#ffffff",
-                "circle-stroke-width": 2
-              }
-            }
-          ]
-        }
-        """;
+    /** 底图来源：有 tiles.pmtiles 走矢量瓦片，没有就退回包内 GeoJSON。 */
+    private TileServer tileServer;
+    private String activeTilesUrl;
+
+    /** 只画道路：背景 + 线，颜色按等级区分。底图永远来自 tiles.pmtiles。 */
+    private String buildStyle(String tilesUrl) {
+        String roadsSource = "\"roads\": {\"type\": \"vector\", \"tiles\": [\"" + tilesUrl + "\"],"
+                + " \"minzoom\": 8, \"maxzoom\": 15,"
+                + " \"attribution\": \"© OpenStreetMap contributors (ODbL)\"}";
+        String sourceLayer = "\"source-layer\": \"roads\",";
+        return """
+                {
+                  "version": 8,
+                  "sources": {
+                    %s,
+                    "route": {"type": "geojson", "data": {"type": "FeatureCollection", "features": []}},
+                    "endpoints": {"type": "geojson", "data": {"type": "FeatureCollection", "features": []}},
+                    "cameras": {"type": "geojson", "data": {"type": "FeatureCollection", "features": []}},
+                    "me": {"type": "geojson", "data": {"type": "FeatureCollection", "features": []}}
+                  },
+                  "layers": [
+                    {"id": "background", "type": "background",
+                     "paint": {"background-color": "#f4f1ea"}},
+                    {"id": "road-casing", "type": "line", "source": "roads",
+                     %s
+                     "paint": {"line-color": "#ffffff", "line-width": 3.2}},
+                    {"id": "roads", "type": "line", "source": "roads",
+                     %s
+                     "paint": {
+                       "line-color": ["match", ["get", "highway"],
+                         "trunk", "#d94f2b", "primary", "#e07b39", "secondary", "#e8a33d",
+                         "tertiary", "#f0c04a", "#5d8aa8"],
+                       "line-width": 1.6
+                     }},
+                    {"id": "route-casing", "type": "line", "source": "route",
+                     "layout": {"line-join": "round", "line-cap": "round"},
+                     "paint": {"line-color": "#ffffff", "line-width": 9}},
+                    {"id": "route-line", "type": "line", "source": "route",
+                     "layout": {"line-join": "round", "line-cap": "round"},
+                     "paint": {"line-color": "#d81b60", "line-width": 6}},
+                    {"id": "cameras", "type": "circle", "source": "cameras",
+                     "paint": {
+                       "circle-radius": 5,
+                       "circle-color": ["match", ["get", "type"],
+                         1, "#e53935", 3, "#e53935", 10, "#e53935",
+                         4, "#fb8c00", 5, "#fb8c00", 7, "#fb8c00", 13, "#fb8c00",
+                         "#757575"],
+                       "circle-stroke-color": "#ffffff", "circle-stroke-width": 1
+                     }},
+                    {"id": "me", "type": "circle", "source": "me",
+                     "paint": {"circle-radius": 8, "circle-color": "#1e88e5",
+                               "circle-stroke-color": "#ffffff", "circle-stroke-width": 3}},
+                    {"id": "endpoints", "type": "circle", "source": "endpoints",
+                     "paint": {
+                       "circle-radius": 7,
+                       "circle-color": ["match", ["get", "kind"], "origin", "#2e7d32", "#c62828"],
+                       "circle-stroke-color": "#ffffff", "circle-stroke-width": 2
+                     }}
+                  ]
+                }
+                """.formatted(roadsSource, sourceLayer, sourceLayer);
+    }
 
     private MapView mapView;
     private org.maplibre.android.maps.MapLibreMap navMap;
@@ -169,6 +125,7 @@ public final class BaseMapActivity extends Activity {
         MapLibre.getInstance(this);
         setContentView(R.layout.activity_base_map);
 
+        startTileServer();
         mapView = findViewById(R.id.base_map_view);
         findViewById(R.id.button_replan_check).setOnClickListener(view -> runReplanCheck());
         findViewById(R.id.button_nav_start).setOnClickListener(view -> toggleNavigation());
@@ -176,7 +133,7 @@ public final class BaseMapActivity extends Activity {
         mapView.getMapAsync(map -> {
             map.getUiSettings().setCompassEnabled(true);
             map.setStyle(
-                    new org.maplibre.android.maps.Style.Builder().fromJson(STYLE_JSON),
+                    new org.maplibre.android.maps.Style.Builder().fromJson(buildStyle(activeTilesUrl)),
                     style -> {
                         Log.i(TAG, "style loaded");
                         navMap = map;
@@ -784,4 +741,58 @@ public final class BaseMapActivity extends Activity {
     }
 
     /** `CameraTabType` 的取值，这里只需要给骑手看懂的那几类。 */
+
+    /** 有 tiles.pmtiles 就在回环口起瓦片服务；没有就退回 GeoJSON 底图。 */
+    private void startTileServer() {
+        java.io.File archive = OfflineData.tilesFile(this);
+        if (!archive.isFile()) {
+            // 没有瓦片就是没有底图：明确告诉用户，别画一张空白地图让人猜。
+            android.widget.Toast.makeText(this, R.string.tiles_missing, Toast.LENGTH_LONG).show();
+            return;
+        }
+        try {
+            tileServer = TileServer.start(archive.getAbsolutePath());
+            activeTilesUrl = tileServer.tileUrlTemplate();
+            Log.i(TAG, "serving tiles from " + archive.getName() + " at " + activeTilesUrl);
+        } catch (java.io.IOException error) {
+            Log.w(TAG, "tile server failed: " + error);
+        }
+    }
+
+    // ---- MapView 生命周期 ----
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        mapView.onPause();
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        mapView.onStop();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (tileServer != null) {
+            tileServer.stop();
+            tileServer = null;
+        }
+        if (locationManager != null && locationListener != null) {
+            try {
+                locationManager.removeUpdates(locationListener);
+            } catch (SecurityException ignored) {
+                // 进程要退了，没权限也没关系。
+            }
+        }
+        mapView.onDestroy();
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        mapView.onSaveInstanceState(outState);
+    }
 }

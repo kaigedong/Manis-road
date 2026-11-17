@@ -97,6 +97,8 @@ public final class MotuCore {
     private static native String nativeRouteFlicker(String referenceJson, String freshJson,
                                                     double latitude, double longitude);
 
+    private static native byte[] nativeTile(String pmtilesPath, int zoom, int x, int y);
+
     private static native String nativeEndpoints();
 
     private static native String nativeConstants();
@@ -241,6 +243,11 @@ public final class MotuCore {
     /** 两条路线的重合度（0..1，50 m 容差）。 */
     public static CoreResult routeOverlap(JSONArray a, JSONArray b) {
         return CoreResult.parse(nativeRouteOverlap(a.toString(), b.toString()));
+    }
+
+    /** 从 tiles.pmtiles 取一块原始 gzip 瓦片；不存在时返回 null。 */
+    public static byte[] tile(String pmtilesPath, int zoom, int x, int y) {
+        return nativeTile(pmtilesPath, zoom, x, y);
     }
 
     public static CoreResult loadGraph(String graphPath) {

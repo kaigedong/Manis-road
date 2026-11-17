@@ -132,7 +132,8 @@ node tools/map-preview/serve.mjs var/offline 8089
 - ✅ **路线已画到真机地图上**：`BaseMapActivity` 调 JNI 离线规划（人民广场→陆家嘴），
   把 `points` 转成 GeoJSON LineString 交给 MapLibre，配起终点圆点、按折线实际范围取景。
   截图：[`images/android-route.png`](images/android-route.png)
-- 🟡 但 App 内用的是**同源 GeoJSON**（10.5 MB），**不是** `tiles.pmtiles`：MapLibre
-  Android 的矢量源只接受 HTTP 模板或离线区包，没有内建 `pmtiles://` 协议。
-  PMTiles 在 Web 端由 JS 协议支持；Android 要接需要自建 tile provider
+- ✅ **App 现在真的从 `tiles.pmtiles` 渲染**（2026-11-17）：MapLibre 的矢量源要
+  HTTP 模板，所以应用内起了一个只监听 `127.0.0.1` 的瓦片服务，通过 JNI 从归档里
+  取原始 gzip 瓦片。GeoJSON 兜底与 `assets/roads.geojson`（10.5 MB）已删除——
+  验证方式就是删掉它之后地图仍然完整渲染。截图：[`images/android-pmtiles.png`](images/android-pmtiles.png)
 - ⛔ 底图只有道路层：没有建筑、水系、地名标注（Overpass 只抓了 `highway`）

@@ -32,6 +32,11 @@ public final class OfflineData {
         return externalFile != null ? externalFile : internal;
     }
 
+    /** `.mrdp` 里解出来的离线瓦片归档。 */
+    public static File tilesFile(Context context) {
+        return pick(context, "tiles.pmtiles");
+    }
+
     public static File camerasFile(Context context) {
         return pick(context, "cameras.json");
     }

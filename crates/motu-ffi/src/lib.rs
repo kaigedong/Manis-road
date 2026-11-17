@@ -18,7 +18,7 @@ use std::{
 
 use jni::JNIEnv;
 use jni::objects::{JByteArray, JClass, JString};
-use jni::sys::{jboolean, jdouble, jstring};
+use jni::sys::{jboolean, jdouble, jint, jstring};
 #[cfg(feature = "http")]
 use motu_core::api::ReqwestTransport;
 use motu_core::{
@@ -29,6 +29,7 @@ use motu_core::{
     login as auth_login, logout as auth_logout, parse_amap_positions, safe_env_token,
     signing_certificate_md5, sync_official_cameras,
 };
+use motu_pack::pmtiles::TileSet;
 use motu_routing::{
     CameraDeterrent, Candidate, ReplanPolicy, ReplanReason, RoadGraph, cameras_within,
     evaluate_after, route_overlap,
@@ -41,12 +42,35 @@ struct LoadedGraph {
     graph: RoadGraph,
 }
 
+/// Cached `tiles.pmtiles` archive; the app asks for one tile per map frame.
+struct LoadedTiles {
+    path: String,
+    tiles: TileSet,
+}
+
 #[derive(Default)]
 struct FfiState {
     engine: CameraScanEngine,
     store: Option<FileStore>,
     core: CoreState,
     graph: Option<LoadedGraph>,
+    tiles: Option<LoadedTiles>,
+}
+
+fn tiles_for<'a>(state: &'a mut FfiState, path: &str) -> Result<&'a TileSet, String> {
+    let path = path.trim();
+    if path.is_empty() {
+        return Err("pmtiles path is empty".to_owned());
+    }
+    if state.tiles.as_ref().is_some_and(|loaded| loaded.path == path) {
+        return Ok(&state.tiles.as_ref().expect("checked above").tiles);
+    }
+    let tiles = TileSet::open(Path::new(path)).map_err(|error| error.to_string())?;
+    state.tiles = Some(LoadedTiles {
+        path: path.to_owned(),
+        tiles,
+    });
+    Ok(&state.tiles.as_ref().expect("just stored").tiles)
 }
 
 fn graph_for<'a>(state: &'a mut FfiState, path: &str) -> Result<&'a RoadGraph, String> {
@@ -1196,5 +1220,41 @@ mod tests {
     #[test]
     fn timestamps_are_positive() {
         assert!(now_ms() > 0);
+    }
+}
+
+/// `nativeTile(pmtilesPath, z, x, y)`: raw (gzip) tile bytes, or `null` when the
+/// archive has no such tile. The Java side serves these over loopback so
+/// MapLibre can consume them as a normal vector source.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_manisroad_app_core_MotuCore_nativeTile<'local>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    path: JString<'local>,
+    zoom: jint,
+    x: jint,
+    y: jint,
+) -> jni::sys::jbyteArray {
+    let result: Result<Option<Vec<u8>>, String> = (|| {
+        let path = string_arg(&mut env, &path)?;
+        let zoom = u8::try_from(zoom).map_err(|_| format!("bad zoom {zoom}"))?;
+        let x = u32::try_from(x).map_err(|_| format!("bad x {x}"))?;
+        let y = u32::try_from(y).map_err(|_| format!("bad y {y}"))?;
+        with_state(|state| {
+            let tiles = tiles_for(state, &path)?;
+            let tile = tiles.tile(zoom, x, y).map_err(|error| error.to_string())?;
+            Ok(tile.map(<[u8]>::to_vec))
+        })
+    })();
+    match result {
+        Ok(Some(bytes)) => match env.byte_array_from_slice(&bytes) {
+            Ok(array) => array.into_raw(),
+            Err(_) => std::ptr::null_mut(),
+        },
+        Ok(None) => std::ptr::null_mut(),
+        Err(error) => {
+            let _ = env.throw_new("java/lang/IllegalStateException", error);
+            std::ptr::null_mut()
+        }
     }
 }
